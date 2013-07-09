@@ -1,81 +1,80 @@
 package com.github.hajile.symbola.cl
 
-import com.nativelibs4java.opencl.JavaCL
-import com.nativelibs4java.opencl.CLMem.Usage
-import java.nio.ByteBuffer
+import com.google.common.base.Charsets
+import com.google.common.io.Resources
+import com.jogamp.opencl.CLDevice.Type
+import com.jogamp.opencl.CLMemory.Mem
+import com.jogamp.opencl.{CLBuffer, CLContext, CLPlatform}
+import java.nio.FloatBuffer
 import scala.util.Random
-import scala.io.Source
-import java.nio.file.Files
-import com.nativelibs4java.util.IOUtils
-import org.bridj.Pointer
 
 class OpenCLExample
 
 object OpenCLExample extends App {
-  for (p <- JavaCL.listPlatforms()) {
+  for (p <- CLPlatform.listCLPlatforms()) {
     println("Platform: " + p.getName)
-    for (d <- p.listAllDevices(false)) {
+    for (d <- p.listCLDevices(Type.ALL)) {
       println("  Device: " + d.getName)
     }
   }
 
-  val ctx = JavaCL.createBestContext()
-  val q = ctx.createDefaultQueue()
+  val ctx = CLContext.create()
+  val q = ctx.getMaxFlopsDevice.createCommandQueue()
 
   val vectorSize = 1048576
 
-  val buf1 = ctx.createFloatBuffer(Usage.Input, vectorSize)
-  val buf2 = ctx.createFloatBuffer(Usage.Input, vectorSize)
-  val buf3 = ctx.createFloatBuffer(Usage.Output, vectorSize)
+  val buf1 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
+  val buf2 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
+  val buf3 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
 
-  val src = IOUtils.readText(classOf[OpenCLExample].getResource("kernels/kernel1.cl"))
+  val src = Resources.toString(classOf[OpenCLExample].getResource("kernels/kernel1.cl"), Charsets.UTF_8)
   val program = ctx.createProgram(src)
 
-//  program.setFastRelaxedMath()
-//  program.setMadEnable()
-//  program.setUnsafeMathOptimizations()
+  //  program.setFastRelaxedMath()
+  //  program.setMadEnable()
+  //  program.setUnsafeMathOptimizations()
 
   program.build()
 
-  val kernel = program.createKernel("kernel2", buf1, buf2, buf3)
+  val kernel = program.createCLKernel("kernel2")
+  kernel.setArg(0, buf1)
+  kernel.setArg(1, buf2)
+  kernel.setArg(2, buf3)
 
   val rng = new Random
 
   for (i <- 0 until 10) {
-    val ptr1 = Pointer.allocateFloats(vectorSize)
-    val ptr2 = Pointer.allocateFloats(vectorSize)
-    for (i <- 0 until ptr1.getValidElements.toInt)
-      ptr1.set(i, rng.nextGaussian().toFloat)
-    for (i <- 0 until ptr2.getValidElements.toInt)
-      ptr2.set(i, rng.nextGaussian().toFloat)
+    val ptr1 = buf1.getBuffer
+    val ptr2 = buf2.getBuffer
+    for (i <- 0 until ptr1.remaining())
+      ptr1.put(i, rng.nextGaussian().toFloat)
+    for (i <- 0 until ptr2.remaining())
+      ptr2.put(i, rng.nextGaussian().toFloat)
 
-    buf1.write(q, ptr1, false)
-    buf2.write(q, ptr2, false)
+    q.putWriteBuffer(buf1, true)
+    q.putWriteBuffer(buf2, true)
 
     q.finish()
     val began = System.nanoTime()
-    val kernelCompletion = kernel.enqueueNDRange(q, Array(vectorSize), Array(64))
-    kernelCompletion.waitFor()
-    val ret = buf3.read(q)
+    q.put1DRangeKernel(kernel, 0, vectorSize, 64)
+    q.putReadBuffer(buf3, true)
+    q.finish()
 
     val duration = System.nanoTime() - began
-    println(f"Kernel executed in ${duration/1000000.0}%.2fms")
+    println(f"Kernel executed in ${duration / 1000000.0}%.2fms")
 
-//    for (j <- 0 until ret.getValidElements.toInt) {
-//      require(ret.get(j) == ptr1.get(j) * ptr2.get(j))
-//    }
-
-    ptr1.release()
-    ptr2.release()
-    ret.release()
+    //    for (j <- 0 until ret.getValidElements.toInt) {
+    //      require(ret.get(j) == ptr1.get(j) * ptr2.get(j))
+    //    }
   }
 
-  def dumpBuffer(ptr: Pointer[Float]): String = {
+  def dumpBuffer(ptr: CLBuffer[FloatBuffer]): String = {
+    val buf = ptr.getBuffer
     val str = StringBuilder.newBuilder
-    for (i <- 0 until ptr.getValidElements.toInt) {
+    for (i <- 0 until buf.limit()) {
       if (i != 0)
         str.append(' ')
-      str.append(ptr.get(i))
+      str.append(buf.get(i))
     }
     str.toString()
   }

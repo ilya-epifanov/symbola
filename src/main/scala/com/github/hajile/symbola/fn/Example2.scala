@@ -1,13 +1,11 @@
 package com.github.hajile.symbola.fn
 
-import com.nativelibs4java.opencl.JavaCL
 import com.github.hajile.symbola.fn.ExprGraph.RealizedMatrix
+import com.jogamp.opencl.CLContext
 import scala.util.Random
-import org.bridj.Pointer
-import com.nativelibs4java.opencl.CLPlatform.DeviceFeature
 
 object Example2 extends App {
-  val ctx = JavaCL.createBestContext(DeviceFeature.GPU)
+  val ctx = CLContext.create()
   println(s"Using device ${ctx.getDevices.apply(0).getName}")
 
   val expr = new ExprGraph(ctx)
@@ -25,12 +23,12 @@ object Example2 extends App {
   val cols = dim
 
   val rnd = new Random()
-  val buf1 = Pointer.allocateFloats(rows * cols)
-  for (i <- 0 until (rows * cols)) {
-    buf1.set(i, rnd.nextGaussian().toFloat)
-  }
 
-  expr.put("x1", RealizedMatrix(rows, cols), buf1)
+  val buf1 = expr.getIn("x1", RealizedMatrix(rows, cols))
+  for (i <- 0 until (rows * cols)) {
+    buf1.put(i, rnd.nextGaussian().toFloat)
+  }
+  expr.writeIn("x1")
 
   expr.realize()
 
@@ -41,11 +39,11 @@ object Example2 extends App {
     println(f"${elapsed / 1000000.0}%.3fms")
   }
 
-//  val buf2 = Pointer.allocateFloats(rows * cols)
-//  expr.get("f", buf2)
+  //  val buf2 = Pointer.allocateFloats(rows * cols)
+  //  expr.get("f", buf2)
 
-//  for (i <- 0 until 6) {
-//    println(f"${buf1.get(i).toDouble}%.3f \t${buf2.get(i).toDouble}%.3f \t${math.cos(buf1.get(i).toDouble)}%.3f")
-//    require(buf2.get(i) == math.cos(buf1.get(i).toDouble))
-//  }
+  //  for (i <- 0 until 6) {
+  //    println(f"${buf1.get(i).toDouble}%.3f \t${buf2.get(i).toDouble}%.3f \t${math.cos(buf1.get(i).toDouble)}%.3f")
+  //    require(buf2.get(i) == math.cos(buf1.get(i).toDouble))
+  //  }
 }

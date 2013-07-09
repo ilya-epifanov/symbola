@@ -1,18 +1,19 @@
 package com.github.hajile.symbola.fn
 
-import com.nativelibs4java.opencl.{CLEvent, CLMem, CLContext, CLBuffer}
 import scala.collection.mutable
-import com.nativelibs4java.opencl.CLMem.Usage
-import com.nativelibs4java.util.IOUtils
 import com.github.hajile.symbola.cl.OpenCLExample
-import org.bridj.Pointer
+import com.jogamp.opencl.{CLEventList, CLEvent, CLBuffer, CLContext}
+import com.google.common.io.Resources
+import com.google.common.base.Charsets
+import java.nio.FloatBuffer
+import com.jogamp.opencl.CLMemory.Mem
 
 class ExprGraph(val clContext: CLContext) {
 
   import ExprGraph._
 
-  private val queue = clContext.createDefaultQueue()
-  private val program = clContext.createProgram(IOUtils.readText(classOf[OpenCLExample].getResource("kernels/kernels.cl")))
+  private val queue = clContext.getMaxFlopsDevice.createCommandQueue()
+  private val program = clContext.createProgram(Resources.toString(classOf[OpenCLExample].getResource("kernels/kernels.cl"), Charsets.UTF_8))
   //  program.setFastRelaxedMath()
   //  program.setUnsafeMathOptimizations()
   program.build()
@@ -43,25 +44,19 @@ class ExprGraph(val clContext: CLContext) {
 
   def inValue(name: String): BufferWithShape = inputValues(name)
 
-  def put(name: String, shape: RealizedShape, buf: Pointer[java.lang.Float]) {
-    require(buf.getValidElements == shape.size)
-
+  def getIn(name: String, shape: RealizedShape): FloatBuffer = {
     val clBuf = alloc(shape.size)(variables(name))
     inputValues += (name -> BufferWithShape(clBuf, shape))
-
-    clBuf.write(queue, buf, false).waitFor()
+    clBuf.getBuffer
   }
 
-  def get(name: String, buf: Pointer[java.lang.Float]) {
-    val out = realized.get(roots(name).expr).out
-    require(buf.getValidElements == out.shape.size)
-
-    out.buf.read(queue, buf, false).waitFor()
+  def writeIn(name: String) {
+    queue.putWriteBuffer(inputValues(name).buf, true)
   }
 
-  def alloc(size: Int, kind: CLMem.Usage = Usage.InputOutput)(implicit e: Expr): FloatCLBuffer = {
+  def alloc(size: Int)(implicit e: Expr): FloatCLBuffer = {
     println(f"Allocating CL Buffer with size ${size * 4 / 1048576.0}%.2fMiB for expression $e")
-    clContext.createFloatBuffer(kind, size)
+    clContext.createFloatBuffer(size, Mem.READ_WRITE)
   }
 
   def realize() {
@@ -149,8 +144,11 @@ class ExprGraph(val clContext: CLContext) {
         case Cos(i) =>
           enqueue(i)
           val b = buf(i)
-          val kernel = program.createKernel("ew_cos", b.buf, targetBuf)
-          events += (e -> kernel.enqueueNDRange(queue, Array(b.shape.size), Array(64), waitList(i): _*))
+          val kernel = program.createCLKernel("ew_cos").setArgs(b.buf, targetBuf)
+          val eventsList = new CLEventList(events(i))
+          val thisEvent = new CLEventList(1)
+          queue.put1DRangeKernel(kernel, 0, b.shape.size, 64, eventsList, thisEvent)
+          events += (e -> thisEvent.getEvent(0))
         case Prod(i1, i2) =>
           enqueue(i1)
           enqueue(i2)
@@ -158,8 +156,13 @@ class ExprGraph(val clContext: CLContext) {
           val b2 = buf(i2)
           val b1shape = b1.shape.asInstanceOf[RealizedMatrix]
           val b2shape = b2.shape.asInstanceOf[RealizedMatrix]
-          val kernel = program.createKernel("mmult", b1.buf, b2.buf, Int.box(b1shape.cols), targetBuf)
-          events += (e -> kernel.enqueueNDRange(queue, Array(b1shape.rows, b2shape.cols), Array(32, 16), waitList(i1, i2): _*))
+          val kernel = program.createCLKernel("mmult").setArgs(b1.buf, b2.buf, Int.box(b1shape.cols), targetBuf)
+
+          val eventsList = new CLEventList(waitList(i1, i2): _*)
+          val thisEvent = new CLEventList(1)
+          queue.put2DRangeKernel(kernel, 0, 0, b1shape.rows, b2shape.cols, 32, 16, eventsList, thisEvent)
+
+          events += (e -> thisEvent.getEvent(0))
         case e@OutputCell(_, i) =>
           enqueue(i)
         case e: InputCell =>
@@ -183,7 +186,7 @@ class ExprGraph(val clContext: CLContext) {
 }
 
 object ExprGraph {
-  type FloatCLBuffer = CLBuffer[java.lang.Float]
+  type FloatCLBuffer = CLBuffer[FloatBuffer]
 
   sealed trait RealizedShape {
     def size: Int
