@@ -2,6 +2,12 @@ package com.github.hajile.symbola.fn
 
 sealed trait Shape {}
 
-case class Matrix(rows: Int, cols: Int) extends Shape
+case object Matrix extends Shape
 
-case object Scalar extends Shape
+//case object RowVector extends Shape
+//
+//case object ColVector extends Shape
+//
+//case object DiagVector extends Shape
+
+//case object Scalar extends Shape

@@ -1,14 +1,14 @@
 package com.github.hajile.symbola.ad
 
-import com.github.hajile.symbola.fn.{Eye, Expr, Input, Sum}
-import scala.collection.immutable
 import com.github.hajile.symbola.fn.ExprHasInputs._
+import com.github.hajile.symbola.fn.{InputCell, Eye, Expr, Sum}
+import scala.collection.immutable
 import scala.collection.immutable.SortedMap
 
 class SymbolicBackwardGradient {
-  def adjointTreesFor(gradientOf: Expr, wrt: Set[Input]): Map[Input, Expr] = {
-    SortedMap()(Input.InputOrderingByName) ++
-            SymbolicBackwardGradient.getAdjoint(gradientOf, wrt, Eye(1)).mapValues {
+  def adjointTreesFor(gradientOf: Expr, wrt: Set[InputCell]): Map[InputCell, Expr] = {
+    SortedMap()(InputCell.CellOrderingByName) ++
+            SymbolicBackwardGradient.getAdjoint(gradientOf, wrt, Eye).mapValues {
               es =>
                 Sum(es.toSeq)
             }
@@ -16,18 +16,18 @@ class SymbolicBackwardGradient {
 }
 
 object SymbolicBackwardGradient {
-  private def getAdjoint(node: Expr, wrt: Set[Input], seed: Expr): immutable.HashMap[Input, Set[Expr]] = {
+  private def getAdjoint(node: Expr, wrt: Set[InputCell], seed: Expr): immutable.HashMap[InputCell, Set[Expr]] = {
     val in = inputs(node)
-    val adjoints: Seq[immutable.HashMap[Input, Set[Expr]]] = in.collect {
-      case i: Input if wrt.contains(i) =>
-        immutable.HashMap[Input, Set[Expr]](i -> Set(node.backwardsExpr(seed, i)))
-      case i: Input =>
-        immutable.HashMap[Input, Set[Expr]]()
+    val adjoints: Seq[immutable.HashMap[InputCell, Set[Expr]]] = in.collect {
+      case i: InputCell if wrt.contains(i) =>
+        immutable.HashMap[InputCell, Set[Expr]](i -> Set(node.backwardsExpr(seed, i)))
+      case i: InputCell =>
+        immutable.HashMap[InputCell, Set[Expr]]()
       case e =>
         getAdjoint(e, wrt, node.backwardsExpr(seed, e))
     }
     if (adjoints.isEmpty)
-      immutable.HashMap[Input, Set[Expr]]()
+      immutable.HashMap[InputCell, Set[Expr]]()
     else
       adjoints.reduce {
         (a, b) =>
