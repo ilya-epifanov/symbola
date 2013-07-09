@@ -19,7 +19,10 @@ object OpenCLExample extends App {
   }
 
   val ctx = CLContext.create()
-  val q = ctx.getMaxFlopsDevice.createCommandQueue()
+  val device = ctx.getMaxFlopsDevice
+  println(s"Using device: $device")
+
+  val q = device.createCommandQueue()
 
   val vectorSize = 1048576
 
