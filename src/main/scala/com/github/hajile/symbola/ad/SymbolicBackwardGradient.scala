@@ -7,7 +7,7 @@ import scala.collection.immutable.SortedMap
 
 class SymbolicBackwardGradient {
   def adjointTreesFor(gradientOf: Expr, wrt: Set[InputCell]): Map[InputCell, Expr] = {
-    SortedMap()(InputCell.CellOrderingByName) ++
+    SortedMap()(InputCell.OrderingByName) ++
             SymbolicBackwardGradient.getAdjoint(gradientOf, wrt, Eye).mapValues {
               es =>
                 Sum(es.toSeq)

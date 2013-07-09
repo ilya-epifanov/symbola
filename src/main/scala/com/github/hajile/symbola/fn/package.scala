@@ -1,7 +1,7 @@
 package com.github.hajile.symbola
 
-import com.github.hajile.symbola.ad.BackwardGradient
-import BackwardGradient.BackwardContext
+//import com.github.hajile.symbola.ad.BackwardGradient
+//import BackwardGradient.BackwardContext
 import breeze.linalg.DenseMatrix
 import breeze.numerics
 
@@ -9,9 +9,9 @@ package object fn {
   type SimpleMatrix = DenseMatrix[Double]
 
   object Fn {
-    def input(name: String, v: Double) = Input(name, DenseMatrix(v))
-
-    def input(name: String, v: SimpleMatrix) = Input(name, v)
+//    def input(name: String, v: Double) = Input(name, DenseMatrix(v))
+//
+//    def input(name: String, v: SimpleMatrix) = Input(name, v)
 
     def value(v: Double): Expr = new Value(DenseMatrix(v))
 

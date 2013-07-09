@@ -1,25 +1,27 @@
 package com.github.hajile.symbola.fn
 
-import com.nativelibs4java.opencl.{CLUserEvent, CLEvent, CLMem, CLContext, CLBuffer}
+import com.nativelibs4java.opencl.{CLEvent, CLMem, CLContext, CLBuffer}
 import scala.collection.mutable
 import com.nativelibs4java.opencl.CLMem.Usage
 import com.nativelibs4java.util.IOUtils
 import com.github.hajile.symbola.cl.OpenCLExample
+import org.bridj.Pointer
 
 class ExprGraph(val clContext: CLContext) {
+
   import ExprGraph._
 
-  private val queue = clContext.createDefaultOutOfOrderQueueIfPossible()
+  private val queue = clContext.createDefaultQueue()
   private val program = clContext.createProgram(IOUtils.readText(classOf[OpenCLExample].getResource("kernels/kernels.cl")))
-  program.setFastRelaxedMath()
-  program.setUnsafeMathOptimizations()
+  //  program.setFastRelaxedMath()
+  //  program.setUnsafeMathOptimizations()
   program.build()
 
   private val variables = mutable.HashMap[String, InputCell]()
   private val roots = mutable.HashMap[String, OutputCell]()
 
   private val inputValues = mutable.HashMap[String, BufferWithShape]()
-  private val outputValues = mutable.HashMap[String, BufferWithShape]()
+  //  private val outputValues = mutable.HashMap[String, BufferWithShape]()
 
   private var realized: Option[Map[Expr, RealizedExpr]] = None
 
@@ -41,9 +43,24 @@ class ExprGraph(val clContext: CLContext) {
 
   def inValue(name: String): BufferWithShape = inputValues(name)
 
-  def outValue(name: String): BufferWithShape = outputValues(name)
+  def put(name: String, shape: RealizedShape, buf: Pointer[java.lang.Float]) {
+    require(buf.getValidElements == shape.size)
 
-  def alloc(size: Int, kind: CLMem.Usage = Usage.InputOutput): FloatCLBuffer = {
+    val clBuf = alloc(shape.size)(variables(name))
+    inputValues += (name -> BufferWithShape(clBuf, shape))
+
+    clBuf.write(queue, buf, false).waitFor()
+  }
+
+  def get(name: String, buf: Pointer[java.lang.Float]) {
+    val out = realized.get(roots(name).expr).out
+    require(buf.getValidElements == out.shape.size)
+
+    out.buf.read(queue, buf, false).waitFor()
+  }
+
+  def alloc(size: Int, kind: CLMem.Usage = Usage.InputOutput)(implicit e: Expr): FloatCLBuffer = {
+    println(f"Allocating CL Buffer with size ${size * 4 / 1048576.0}%.2fMiB for expression $e")
     clContext.createFloatBuffer(kind, size)
   }
 
@@ -53,7 +70,8 @@ class ExprGraph(val clContext: CLContext) {
     val cache = mutable.HashMap[Expr, RealizedExpr]()
 
     def realizeExpr(e: Expr): RealizedExpr = {
-      def r(e: Expr, shape: RealizedShape): RealizedExpr = {
+      def r(implicit e: Expr, shape: RealizedShape): RealizedExpr = {
+        require(!cache.contains(e))
         val ret = RealizedExpr(e, BufferWithShape(alloc(shape.size), shape))
         cache += e -> ret
         ret
@@ -64,7 +82,10 @@ class ExprGraph(val clContext: CLContext) {
       else e match {
         case c@InputCell(name, shape) =>
           require(variables.contains(name), "Where did you get that variable? It doesn't belong to this ExprGraph")
-          r(c, inputValues(name).shape)
+          val ret = RealizedExpr(c, inputValues(name))
+          cache += e -> ret
+          ret
+        //          r(c, inputValues(name).shape)
         case e@Cos(i) =>
           r(e, realizeExpr(i).out.shape)
         case e@ElemwiseMul(i1, i2) =>
@@ -75,7 +96,9 @@ class ExprGraph(val clContext: CLContext) {
         case e@Neg(i) =>
           r(e, realizeExpr(i).out.shape)
         case e@OutputCell(_, i) =>
-          r(e, realizeExpr(i).out.shape)
+          val ret = RealizedExpr(e, realizeExpr(i).out)
+          cache += e -> ret
+          ret
         case e@Prod(i1, i2) =>
           val shape1 = realizeExpr(i1).out.shape.asInstanceOf[RealizedMatrix]
           val shape2 = realizeExpr(i2).out.shape.asInstanceOf[RealizedMatrix]
@@ -103,9 +126,11 @@ class ExprGraph(val clContext: CLContext) {
     require(realized.isDefined)
 
     val events = mutable.HashMap[Expr, CLEvent]()
-    val outputEvents = mutable.HashMap[OutputCell, CLEvent]()
+    //    val outputEvents = mutable.HashMap[OutputCell, CLEvent]()
 
     def enqueue(e: Expr) {
+      //      if (e.isInstanceOf[InputCell])
+      //        return
       if (events.contains(e))
         return
       val re = realized.get(e)
@@ -116,45 +141,60 @@ class ExprGraph(val clContext: CLContext) {
         realized.get(e).out
       }
 
+      def waitList(e: Expr*): Seq[CLEvent] = {
+        e.filterNot(_.isInstanceOf[InputCell]).map(events)
+      }
+
       e match {
         case Cos(i) =>
           enqueue(i)
           val b = buf(i)
-          val kernel = program.createKernel("cos", b.buf, targetBuf)
-          kernel.enqueueNDRange(queue, Array(b.shape.size), events(i))
+          val kernel = program.createKernel("ew_cos", b.buf, targetBuf)
+          events += (e -> kernel.enqueueNDRange(queue, Array(b.shape.size), Array(64), waitList(i): _*))
+        case Prod(i1, i2) =>
+          enqueue(i1)
+          enqueue(i2)
+          val b1 = buf(i1)
+          val b2 = buf(i2)
+          val b1shape = b1.shape.asInstanceOf[RealizedMatrix]
+          val b2shape = b2.shape.asInstanceOf[RealizedMatrix]
+          val kernel = program.createKernel("mmult", b1.buf, b2.buf, Int.box(b1shape.cols), targetBuf)
+          events += (e -> kernel.enqueueNDRange(queue, Array(b1shape.rows, b2shape.cols), Array(32, 16), waitList(i1, i2): _*))
         case e@OutputCell(_, i) =>
           enqueue(i)
+        case e: InputCell =>
       }
     }
 
-    for ((name, in) <- variables) {
-      events += (in -> clContext.createUserEvent())
-    }
-
+    //    for (in <- variables.values) {
+    //      events += (in -> clContext.createUserEvent())
+    //    }
+    //
     for ((name, out) <- roots) {
       enqueue(out)
     }
 
-    for (in <- variables.values) {
-      events(in).asInstanceOf[CLUserEvent].setComplete()
-    }
-
-
+    //    for (in <- variables.values) {
+    //      events(in).asInstanceOf[CLUserEvent].setComplete()
+    //    }
+    //
+    queue.finish()
   }
 }
 
 object ExprGraph {
   type FloatCLBuffer = CLBuffer[java.lang.Float]
 
-  private sealed trait RealizedShape {
+  sealed trait RealizedShape {
     def size: Int
   }
 
-  private case class RealizedMatrix(rows: Int, cols: Int) extends RealizedShape{
+  case class RealizedMatrix(rows: Int, cols: Int) extends RealizedShape {
     def size = rows * cols
   }
 
-  private case class BufferWithShape(buf: FloatCLBuffer, shape: RealizedShape)
+  case class BufferWithShape(buf: FloatCLBuffer, shape: RealizedShape)
 
   private case class RealizedExpr(expr: Expr, out: BufferWithShape)
+
 }

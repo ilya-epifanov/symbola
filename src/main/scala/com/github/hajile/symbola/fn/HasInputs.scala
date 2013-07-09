@@ -25,7 +25,7 @@ object ExprHasInputs extends HasInputs[Expr] {
     case Neg(e) => Neg(fn(e))
     case Transpose(e) => Transpose(fn(e))
     case ElemwiseMul(e1, e2) => ElemwiseMul(fn(e1), fn(e2))
-    case Id(e) => Id(fn(e))
+//    case Id(e) => Id(fn(e))
     case e => e
   }
 }

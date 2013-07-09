@@ -13,7 +13,7 @@ class OpenCLExample
 
 object OpenCLExample extends App {
   for (p <- JavaCL.listPlatforms()) {
-    println("Profile: " + p.getName)
+    println("Platform: " + p.getName)
     for (d <- p.listAllDevices(false)) {
       println("  Device: " + d.getName)
     }
@@ -54,7 +54,7 @@ object OpenCLExample extends App {
 
     q.finish()
     val began = System.nanoTime()
-    val kernelCompletion = kernel.enqueueNDRange(q, Array(vectorSize), Array(1))
+    val kernelCompletion = kernel.enqueueNDRange(q, Array(vectorSize), Array(64))
     kernelCompletion.waitFor()
     val ret = buf3.read(q)
 
