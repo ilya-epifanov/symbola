@@ -20,8 +20,12 @@ object OpenCLExample extends App {
   }
 
   val device = CLPlatform.getDefault(new Filter[CLPlatform] {
-    def accept(item: CLPlatform) = item.getName.contains("CUDA")
+    def accept(item: CLPlatform) = {
+      val name = item.getName
+      name.contains("CUDA") || name.contains("Apple")
+    }
   }).getMaxFlopsDevice
+
   println(s"Using device: $device")
   val ctx = CLContext.create(device)
 
