@@ -14,7 +14,7 @@ object OpenCLExample extends App {
   for (p <- CLPlatform.listCLPlatforms()) {
     println("Platform: " + p.getName)
     for (d <- p.listCLDevices(Type.ALL)) {
-      println("  Device: " + d.getName)
+      println(s"  Device: ${d.getName} [${d.isAvailable}]")
     }
   }
 
