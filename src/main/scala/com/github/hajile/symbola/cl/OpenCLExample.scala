@@ -7,6 +7,7 @@ import com.jogamp.opencl.CLMemory.Mem
 import com.jogamp.opencl.{CLBuffer, CLContext, CLPlatform}
 import java.nio.FloatBuffer
 import scala.util.Random
+import com.jogamp.opencl.util.Filter
 
 class OpenCLExample
 
@@ -19,7 +20,9 @@ object OpenCLExample extends App {
   }
 
   val ctx = CLContext.create()
-  val device = ctx.getMaxFlopsDevice(Type.GPU)
+  val device = CLPlatform.getDefault(new Filter[CLPlatform] {
+    def accept(item: CLPlatform) = item.getName.contains("CUDA")
+  }).getMaxFlopsDevice
   println(s"Using device: $device")
 
   val q = device.createCommandQueue()
