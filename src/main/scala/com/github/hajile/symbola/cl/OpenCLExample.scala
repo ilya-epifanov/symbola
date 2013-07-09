@@ -12,6 +12,8 @@ import com.jogamp.opencl.util.Filter
 class OpenCLExample
 
 object OpenCLExample extends App {
+  val platformString = args(0).toLowerCase
+
   for (p <- CLPlatform.listCLPlatforms()) {
     println("Platform: " + p.getName)
     for (d <- p.listCLDevices(Type.ALL)) {
@@ -22,7 +24,7 @@ object OpenCLExample extends App {
   val device = CLPlatform.getDefault(new Filter[CLPlatform] {
     def accept(item: CLPlatform) = {
       val name = item.getName
-      name.contains("CUDA") || name.contains("Apple")
+      name.toLowerCase.contains(platformString)
     }
   }).getMaxFlopsDevice
 
