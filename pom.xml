@@ -141,6 +141,7 @@
         </executions>
         <configuration>
           <scalaVersion>${scala.version}</scalaVersion>
+          <useZincServer>true</useZincServer>
         </configuration>
       </plugin>
     </plugins>
