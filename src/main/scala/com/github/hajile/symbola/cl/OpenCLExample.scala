@@ -19,11 +19,11 @@ object OpenCLExample extends App {
     }
   }
 
-  val ctx = CLContext.create()
   val device = CLPlatform.getDefault(new Filter[CLPlatform] {
     def accept(item: CLPlatform) = item.getName.contains("CUDA")
   }).getMaxFlopsDevice
   println(s"Using device: $device")
+  val ctx = CLContext.create(device)
 
   val q = device.createCommandQueue()
 
