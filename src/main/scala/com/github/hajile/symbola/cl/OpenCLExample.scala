@@ -19,7 +19,7 @@ object OpenCLExample extends App {
   }
 
   val ctx = CLContext.create()
-  val device = ctx.getMaxFlopsDevice
+  val device = ctx.getMaxFlopsDevice(Type.GPU)
   println(s"Using device: $device")
 
   val q = device.createCommandQueue()
