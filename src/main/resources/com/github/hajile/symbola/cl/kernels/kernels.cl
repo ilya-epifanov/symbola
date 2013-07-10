@@ -23,7 +23,6 @@ __kernel void mmul(__global const float* a, __global const float* b, int dot_dim
 }
 
 #define TILE_WIDTH 16
-#define TILE_AREA 256
 __kernel void mmultopt(__global const float* a, __global const float* bt, int ntiles, int mtiles, int ptiles, __global float* out)
 {
     int i = get_global_id(0); // row
@@ -37,12 +36,11 @@ __kernel void mmultopt(__global const float* a, __global const float* bt, int nt
 
     float temp = 0;
 
-    achunk[li][lj] = a[i + j*get_global_size(1)];
-    bchunk[li][lj] = bt[i + j*get_global_size(1)];
-
-    barrier(CLK_LOCAL_MEM_FENCE);
-
     for (int mm = 0; mm < mtiles; mm++) {
+        achunk[li][lj] = a[i + j*get_global_size(1)];
+        bchunk[li][lj] = bt[i + j*get_global_size(1)];
+
+        barrier(CLK_LOCAL_MEM_FENCE);
         temp = mad(achunk[li][lj], bchunk[li][lj], temp);
         barrier(CLK_LOCAL_MEM_FENCE);
     }
