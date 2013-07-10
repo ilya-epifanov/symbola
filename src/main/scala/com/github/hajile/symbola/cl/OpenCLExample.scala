@@ -93,7 +93,7 @@ object OpenCLExample extends App {
     val ret = buf3.getBuffer
     val mccl = new DenseMatrix[Float](side, side)
     for (i <- 0 until side; j <- 0 until side)
-      mccl.update(i, j, ptr2.get(i + j*side))
+      mccl.update(i, j, ret.get(i + j*side))
 
     val mcref = ma * mb.t
 
