@@ -59,7 +59,7 @@ object OpenCLExample extends App {
 
   val rng = new Random
 
-  for (i <- 0 until 10) {
+  for (i <- 0 until 1) {
     val ptr1 = buf1.getBuffer
     val ptr2 = buf2.getBuffer
     for (i <- 0 until ptr1.limit())
@@ -83,7 +83,8 @@ object OpenCLExample extends App {
     for (j <- 0 until ret.limit()) {
       val x = j % side
       val y = j - x
-      require(ret.get(x + y*side) == ptr1.get(x + y*side) * ptr2.get(y + x*side))
+      val r = ret.get(x + y * side)
+      println(s"[$x][$y] : $r")
     }
   }
 
