@@ -12,7 +12,7 @@ import com.jogamp.opencl.util.Filter
 class OpenCLExample
 
 object OpenCLExample extends App {
-  val platformString = args(0).toLowerCase
+  val platformString = if (args.length >= 1) args(0).toLowerCase else ""
 
   for (p <- CLPlatform.listCLPlatforms()) {
     println("Platform: " + p.getName)
@@ -33,13 +33,14 @@ object OpenCLExample extends App {
 
   val q = device.createCommandQueue()
 
-  val vectorSize = 1048576
+  val side = 1024
+  val vectorSize = side * side
 
   val buf1 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
   val buf2 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
   val buf3 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
 
-  val src = Resources.toString(classOf[OpenCLExample].getResource("kernels/kernel1.cl"), Charsets.UTF_8)
+  val src = Resources.toString(classOf[OpenCLExample].getResource("kernels/kernels.cl"), Charsets.UTF_8)
   val program = ctx.createProgram(src)
 
   //  program.setFastRelaxedMath()
@@ -48,36 +49,42 @@ object OpenCLExample extends App {
 
   program.build()
 
-  val kernel = program.createCLKernel("kernel2")
+  val kernel = program.createCLKernel("mmultopt")
   kernel.setArg(0, buf1)
   kernel.setArg(1, buf2)
-  kernel.setArg(2, buf3)
+  kernel.setArg(2, 64)
+  kernel.setArg(3, 64)
+  kernel.setArg(4, 64)
+  kernel.setArg(5, buf3)
 
   val rng = new Random
 
   for (i <- 0 until 10) {
     val ptr1 = buf1.getBuffer
     val ptr2 = buf2.getBuffer
-    for (i <- 0 until ptr1.remaining())
-      ptr1.put(i, rng.nextGaussian().toFloat)
-    for (i <- 0 until ptr2.remaining())
-      ptr2.put(i, rng.nextGaussian().toFloat)
+    for (i <- 0 until ptr1.limit())
+      ptr1.put(i, rng.nextFloat())
+    for (i <- 0 until ptr2.limit())
+      ptr2.put(i, rng.nextFloat())
 
     q.putWriteBuffer(buf1, true)
     q.putWriteBuffer(buf2, true)
 
     q.finish()
     val began = System.nanoTime()
-    q.put1DRangeKernel(kernel, 0, vectorSize, 64)
+    q.put2DRangeKernel(kernel, 0, 0, side, side, 16, 16)
     q.putReadBuffer(buf3, true)
     q.finish()
 
     val duration = System.nanoTime() - began
     println(f"Kernel executed in ${duration / 1000000.0}%.2fms")
 
-    //    for (j <- 0 until ret.getValidElements.toInt) {
-    //      require(ret.get(j) == ptr1.get(j) * ptr2.get(j))
-    //    }
+    val ret = buf3.getBuffer
+    for (j <- 0 until ret.limit()) {
+      val x = j % side
+      val y = j - x
+      require(ret.get(x + y*side) == ptr1.get(x + y*side) * ptr2.get(y + x*side))
+    }
   }
 
   def dumpBuffer(ptr: CLBuffer[FloatBuffer]): String = {

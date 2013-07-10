@@ -7,6 +7,7 @@ import com.google.common.io.Resources
 import com.google.common.base.Charsets
 import java.nio.FloatBuffer
 import com.jogamp.opencl.CLMemory.Mem
+import com.jogamp.opencl.CLDevice.Type
 
 class ExprGraph(val clContext: CLContext) {
 

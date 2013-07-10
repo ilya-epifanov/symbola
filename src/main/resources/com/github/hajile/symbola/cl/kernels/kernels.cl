@@ -22,42 +22,30 @@ __kernel void mmul(__global const float* a, __global const float* b, int dot_dim
     out[dot_dim*j + i] = temp;
 }
 
-__kernel void mmult(__global const float* at, __global const float* b, int dot_dim, __global float* out)
+#define TILE_WIDTH 16
+#define TILE_AREA 256
+__kernel void mmultopt(__global const float* a, __global const float* bt, int ntiles, int mtiles, int ptiles, __global float* out)
 {
     int i = get_global_id(0); // row
     int j = get_global_id(1); // column
-    int rows = get_global_size(0);
-    int cols = get_global_size(1);
 
-    int lid = get_local_id(0);
+    __local float achunk[TILE_WIDTH][TILE_WIDTH];
+    __local float bchunk[TILE_WIDTH][TILE_WIDTH];
+
+    int li = get_local_id(0);
+    int lj = get_local_id(1);
 
     float temp = 0;
 
-    __local float arow[32];
-    __local float brow[32];
-    __local float crow[32];
-
-    arow[lid] = at[i*dot_dim + lid];
-    brow[lid] = b[j*dot_dim + lid];
-    crow[lid] = 0;
+    achunk[li][lj] = a[i + j*get_global_size(1)];
+    bchunk[li][lj] = bt[i + j*get_global_size(1)];
 
     barrier(CLK_LOCAL_MEM_FENCE);
-    crow[lid] = arow[lid] * brow[lid];
 
-    for(int offset = 1;
-        offset < get_local_size(0);
-        offset <<= 1) {
-        int mask = (offset << 1) - 1;
-        if ((local_index & mask) == 0) {
-            float other = scratch[local_index + offset];
-            float mine = scratch[local_index];
-            scratch[local_index] = mine + other;
-        }
+    for (int mm = 0; mm < mtiles; mm++) {
+        temp = mad(achunk[li][lj], bchunk[li][lj], temp);
         barrier(CLK_LOCAL_MEM_FENCE);
     }
-    if (local_index == 0) {
-        out[dot_dim*j + i] = scratch[0];
-    }
 
-    out[dot_dim*j + i] = temp;
+    out[i + j*get_global_size(1)] = temp;
 }
