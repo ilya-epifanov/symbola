@@ -8,6 +8,7 @@ import com.jogamp.opencl.{CLBuffer, CLContext, CLPlatform}
 import java.nio.FloatBuffer
 import scala.util.Random
 import com.jogamp.opencl.util.Filter
+import breeze.linalg.DenseMatrix
 
 class OpenCLExample
 
@@ -33,7 +34,7 @@ object OpenCLExample extends App {
 
   val q = device.createCommandQueue()
 
-  val side = 1024
+  val side = 16
   val vectorSize = side * side
 
   val buf1 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
@@ -52,20 +53,30 @@ object OpenCLExample extends App {
   val kernel = program.createCLKernel("mmultopt")
   kernel.setArg(0, buf1)
   kernel.setArg(1, buf2)
-  kernel.setArg(2, 64)
-  kernel.setArg(3, 64)
-  kernel.setArg(4, 64)
+  kernel.setArg(2, side / 16)
+  kernel.setArg(3, side / 16)
+  kernel.setArg(4, side / 16)
   kernel.setArg(5, buf3)
 
   val rng = new Random
+  val ma = new DenseMatrix[Float](side, side)
+  for (i <- 0 until side; j <- 0 until side)
+    ma.update(i, j, rng.nextFloat())
+
+  val mb = new DenseMatrix[Float](side, side)
+  for (i <- 0 until side; j <- 0 until side)
+    mb.update(i, j, rng.nextFloat())
+
+  println(s"----- A -----\n\n$ma\n\n")
+  println(s"----- B -----\n\n$mb\n\n")
 
   for (i <- 0 until 1) {
     val ptr1 = buf1.getBuffer
     val ptr2 = buf2.getBuffer
-    for (i <- 0 until ptr1.limit())
-      ptr1.put(i, rng.nextFloat())
-    for (i <- 0 until ptr2.limit())
-      ptr2.put(i, rng.nextFloat())
+    for (i <- 0 until side; j <- 0 until side)
+      ptr1.put(i + j*side, ma(i, j))
+    for (i <- 0 until side; j <- 0 until side)
+      ptr2.put(i + j*side, mb(i, j))
 
     q.putWriteBuffer(buf1, true)
     q.putWriteBuffer(buf2, true)
@@ -80,12 +91,21 @@ object OpenCLExample extends App {
     println(f"Kernel executed in ${duration / 1000000.0}%.2fms")
 
     val ret = buf3.getBuffer
-    for (j <- 0 until ret.limit()) {
-      val x = j % side
-      val y = j - x
-      val r = ret.get(x + y * side)
-      println(s"[$x][$y] : $r")
-    }
+    val mccl = new DenseMatrix[Float](side, side)
+    for (i <- 0 until side; j <- 0 until side)
+      mccl.update(i, j, ptr2.get(i + j*side))
+
+    val mcref = ma * mb.t
+
+    println(s"----- C (CL) -----\n\n$mccl\n\n")
+    println(s"----- C (ref) -----\n\n$mcref\n\n")
+
+//    for (j <- 0 until ret.limit()) {
+//      val x = j % side
+//      val y = j / side
+//      val r = ret.get(x + y * side)
+//      println(s"[$x][$y] : $r")
+//    }
   }
 
   def dumpBuffer(ptr: CLBuffer[FloatBuffer]): String = {
