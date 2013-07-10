@@ -41,7 +41,9 @@ __kernel void mmultopt(__global const float* a, __global const float* bt, int nt
         bchunk[li][lj] = bt[i + j*get_global_size(1)];
 
         barrier(CLK_LOCAL_MEM_FENCE);
-        temp = mad(achunk[li][lj], bchunk[li][lj], temp);
+        for (int k = 0; k < TILE_WIDTH; k++) {
+           temp = mad(achunk[k][lj], bchunk[k][lj], temp);
+        }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
 
