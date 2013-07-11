@@ -36,7 +36,7 @@ object Example2 extends App {
 
   expr.out("f", e1)
 
-  val dim = 512
+  val dim = 1024
   val rows = dim
   val cols = dim
 

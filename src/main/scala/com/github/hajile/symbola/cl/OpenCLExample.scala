@@ -1,19 +1,20 @@
 package com.github.hajile.symbola.cl
 
+import breeze.linalg.DenseMatrix
 import com.google.common.base.Charsets
 import com.google.common.io.Resources
 import com.jogamp.opencl.CLDevice.Type
 import com.jogamp.opencl.CLMemory.Mem
+import com.jogamp.opencl.util.Filter
 import com.jogamp.opencl.{CLBuffer, CLContext, CLPlatform}
 import java.nio.FloatBuffer
 import scala.util.Random
-import com.jogamp.opencl.util.Filter
-import breeze.linalg.DenseMatrix
 
 class OpenCLExample
 
 object OpenCLExample extends App {
   val platformString = if (args.length >= 1) args(0).toLowerCase else ""
+  val kernelName = if (args.length >= 2) args(1) else "mmultopt"
 
   for (p <- CLPlatform.listCLPlatforms()) {
     println("Platform: " + p.getName)
@@ -34,12 +35,15 @@ object OpenCLExample extends App {
 
   val q = device.createCommandQueue()
 
-  val side = 16
-  val vectorSize = side * side
+  val debug = false
+  val sideN = 1024
+  val sideM = 1024
+  val sideP = 512
+  val tile = 16
 
-  val buf1 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
-  val buf2 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
-  val buf3 = ctx.createFloatBuffer(vectorSize, Mem.ALLOCATE_BUFFER)
+  val buf1 = ctx.createFloatBuffer(sideN * sideP, Mem.ALLOCATE_BUFFER)
+  val buf2 = ctx.createFloatBuffer(sideP * sideM, Mem.ALLOCATE_BUFFER)
+  val buf3 = ctx.createFloatBuffer(sideN * sideM, Mem.ALLOCATE_BUFFER)
 
   val src = Resources.toString(classOf[OpenCLExample].getResource("kernels/kernels.cl"), Charsets.UTF_8)
   val program = ctx.createProgram(src)
@@ -53,59 +57,69 @@ object OpenCLExample extends App {
   val kernel = program.createCLKernel("mmultopt")
   kernel.setArg(0, buf1)
   kernel.setArg(1, buf2)
-  kernel.setArg(2, side / 16)
-  kernel.setArg(3, side / 16)
-  kernel.setArg(4, side / 16)
+  kernel.setArg(2, sideN / tile)
+  kernel.setArg(3, sideM / tile)
+  kernel.setArg(4, sideP / tile)
   kernel.setArg(5, buf3)
 
-  val rng = new Random
-  val ma = new DenseMatrix[Float](side, side)
-  for (i <- 0 until side; j <- 0 until side)
+  val rng = new Random(0)
+  val ma = new DenseMatrix[Float](sideN, sideP)
+  for (i <- 0 until sideN - 1; j <- 0 until sideP - 1)
     ma.update(i, j, rng.nextFloat())
 
-  val mb = new DenseMatrix[Float](side, side)
-  for (i <- 0 until side; j <- 0 until side)
+  val mb = new DenseMatrix[Float](sideP, sideM)
+  for (i <- 0 until sideP - 1; j <- 0 until sideM - 1)
     mb.update(i, j, rng.nextFloat())
 
-  println(s"----- A -----\n\n$ma\n\n")
-  println(s"----- B -----\n\n$mb\n\n")
+  if (debug) {
+    println(s"----- A -----\n\n$ma\n\n")
+    println(s"----- B -----\n\n$mb\n\n")
+  }
 
-  for (i <- 0 until 1) {
+  for (i <- 0 until (if (debug) 1 else 5)) {
     val ptr1 = buf1.getBuffer
     val ptr2 = buf2.getBuffer
-    for (i <- 0 until side; j <- 0 until side)
-      ptr1.put(i + j*side, ma(i, j))
-    for (i <- 0 until side; j <- 0 until side)
-      ptr2.put(i + j*side, mb(i, j))
+    for (i <- 0 until sideN; j <- 0 until sideP)
+      ptr1.put(i + j * sideN, ma(i, j))
+    for (i <- 0 until sideP; j <- 0 until sideM)
+      ptr2.put(i * sideM + j, mb(i, j))
 
     q.putWriteBuffer(buf1, true)
     q.putWriteBuffer(buf2, true)
 
     q.finish()
     val began = System.nanoTime()
-    q.put2DRangeKernel(kernel, 0, 0, side, side, 16, 16)
+    q.put2DRangeKernel(kernel, 0, 0, sideN, sideM, tile, tile)
     q.putReadBuffer(buf3, true)
     q.finish()
 
     val duration = System.nanoTime() - began
     println(f"Kernel executed in ${duration / 1000000.0}%.2fms")
 
-    val ret = buf3.getBuffer
-    val mccl = new DenseMatrix[Float](side, side)
-    for (i <- 0 until side; j <- 0 until side)
-      mccl.update(i, j, ret.get(i + j*side))
+    if (debug) {
+      val ret = buf3.getBuffer
+      val mccl = new DenseMatrix[Float](sideN, sideM)
+      for (i <- 0 until sideN; j <- 0 until sideM)
+        mccl.update(i, j, ret.get(i + j * sideN))
 
-    val mcref = ma * mb.t
+      //    val mbt = mb.t
 
-    println(s"----- C (CL) -----\n\n$mccl\n\n")
-    println(s"----- C (ref) -----\n\n$mcref\n\n")
+      //    val cpuBegan = System.nanoTime()
+      val mcref = ma * mb
+      //    val cpuDuration = System.nanoTime() - cpuBegan
+      //    println(f"CPU naïve algorithm executed in ${cpuDuration / 1000000.0}%.2fms")
+      //    mcref.hashCode()
 
-//    for (j <- 0 until ret.limit()) {
-//      val x = j % side
-//      val y = j / side
-//      val r = ret.get(x + y * side)
-//      println(s"[$x][$y] : $r")
-//    }
+      println(s"----- C (CL) -----\n\n$mccl\n\n")
+      println(s"----- C (ref) -----\n\n$mcref\n\n")
+
+      //    for (j <- 0 until ret.limit()) {
+      //      val x = j % side
+      //      val y = j / side
+      //      val r = ret.get(x + y * side)
+      //      println(s"[$x][$y] : $r")
+      //    }
+    }
   }
 
   def dumpBuffer(ptr: CLBuffer[FloatBuffer]): String = {

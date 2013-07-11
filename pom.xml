@@ -142,6 +142,7 @@
         <configuration>
           <scalaVersion>${scala.version}</scalaVersion>
           <useZincServer>true</useZincServer>
+          <recompileMode>incremental</recompileMode>
         </configuration>
       </plugin>
     </plugins>
