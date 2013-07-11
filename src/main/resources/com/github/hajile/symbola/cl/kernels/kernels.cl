@@ -45,13 +45,14 @@ __kernel void mmultopt(__global const float* a, __global const float* bt, int n,
 
     int ptiles = p / TILE_WIDTH;
 
-    for (int tile = 0; tile < ptiles; tile++) {
-        //     C   R
-        // a[lj + tile*TW][i]
-        // b[li + tile*TW][(li + gj*TW)]
+    int ai = i;
+    int bi = li + gj*TILE_WIDTH;
 
-        achunk[lj][li] = select(a[(TILE_WIDTH*tile+lj)*n + i], 0.0f, i >= n);
-        bchunk[lj][li] = select(bt[(TILE_WIDTH*tile+lj)*m + (li + gj*TILE_WIDTH)], 0.0f, j >= m);
+    for (int tile = 0; tile < ptiles; tile++) {
+        int abj = TILE_WIDTH*tile+lj;
+
+        achunk[lj][li] = select(a[abj*n + ai], 0.0f, ai >= m || abj >= n);
+        bchunk[lj][li] = select(bt[abj*m + bi], 0.0f, bi >= m || abj >= n);
 
         barrier(CLK_LOCAL_MEM_FENCE);
         for (int k = 0; k < TILE_WIDTH; k++) {
