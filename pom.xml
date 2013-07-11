@@ -86,6 +86,13 @@
       <scope>runtime</scope>
     </dependency>
     <dependency>
+      <groupId>org.jogamp.jocl</groupId>
+      <artifactId>jocl</artifactId>
+      <classifier>natives-windows-amd64</classifier>
+      <version>2.0.2-rc12</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
       <groupId>org.jogamp.gluegen</groupId>
       <artifactId>gluegen-rt</artifactId>
       <version>2.0.2-rc12</version>
@@ -101,6 +108,13 @@
       <groupId>org.jogamp.gluegen</groupId>
       <artifactId>gluegen-rt</artifactId>
       <classifier>natives-linux-amd64</classifier>
+      <version>2.0.2-rc12</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jogamp.gluegen</groupId>
+      <artifactId>gluegen-rt</artifactId>
+      <classifier>natives-windows-amd64</classifier>
       <version>2.0.2-rc12</version>
       <scope>runtime</scope>
     </dependency>

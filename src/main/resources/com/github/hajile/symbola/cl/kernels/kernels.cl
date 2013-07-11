@@ -27,7 +27,7 @@ __kernel void mmul(__global const float* a, __global const float* b, int dot_dim
   matrices are in column-major format, B is transposed
 */
 #define TILE_WIDTH 16
-__kernel void mmultopt(__global const float* a, __global const float* bt, int ntiles, int mtiles, int ptiles, __global float* out)
+__kernel void mmultopt(__global const float* a, __global const float* bt, int n, int m, int p, __global float* out)
 {
     int i = get_global_id(0); // row (A row)
     int j = get_global_id(1); // column (B row)
@@ -43,24 +43,23 @@ __kernel void mmultopt(__global const float* a, __global const float* bt, int nt
 
     float temp = 0;
 
-    int n = ntiles * TILE_WIDTH;
-    int m = mtiles * TILE_WIDTH;
-    int p = ptiles * TILE_WIDTH;
+    int ptiles = p / TILE_WIDTH;
 
-
-    for (int mm = 0; mm < ptiles; mm++) {
+    for (int tile = 0; tile < ptiles; tile++) {
         //     C   R
-        // a[lj + mm*TW][i]
-        // b[li + mm*TW][j]
-        achunk[lj][li] = a[(TILE_WIDTH*mm+lj)*n + i];
-        bchunk[lj][li] = bt[(TILE_WIDTH*mm+lj)*m + (li + gj*TILE_WIDTH)];
+        // a[lj + tile*TW][i]
+        // b[li + tile*TW][(li + gj*TW)]
+
+        achunk[lj][li] = select(a[(TILE_WIDTH*tile+lj)*n + i], 0.0f, i >= n);
+        bchunk[lj][li] = select(bt[(TILE_WIDTH*tile+lj)*m + (li + gj*TILE_WIDTH)], 0.0f, j >= m);
 
         barrier(CLK_LOCAL_MEM_FENCE);
         for (int k = 0; k < TILE_WIDTH; k++) {
-           temp += achunk[k][li] * bchunk[k][lj];
+           temp = mad(achunk[k][li], bchunk[k][lj], temp);
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
 
-    out[i + j*n] = temp;
+    if (i < n && j < m)
+        out[i + j*n] = temp;
 }

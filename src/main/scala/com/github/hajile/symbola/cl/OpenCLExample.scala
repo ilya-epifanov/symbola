@@ -36,9 +36,9 @@ object OpenCLExample extends App {
   val q = device.createCommandQueue()
 
   val debug = false
-  val sideN = 1024
-  val sideM = 1024
-  val sideP = 512
+  val sideN = if (debug) 3 else 1024
+  val sideM = if (debug) 4 else 3072
+  val sideP = if (debug) 2 else 1024
   val tile = 16
 
   val buf1 = ctx.createFloatBuffer(sideN * sideP, Mem.ALLOCATE_BUFFER)
@@ -57,18 +57,18 @@ object OpenCLExample extends App {
   val kernel = program.createCLKernel("mmultopt")
   kernel.setArg(0, buf1)
   kernel.setArg(1, buf2)
-  kernel.setArg(2, sideN / tile)
-  kernel.setArg(3, sideM / tile)
-  kernel.setArg(4, sideP / tile)
+  kernel.setArg(2, sideN)
+  kernel.setArg(3, sideM)
+  kernel.setArg(4, sideP)
   kernel.setArg(5, buf3)
 
   val rng = new Random(0)
   val ma = new DenseMatrix[Float](sideN, sideP)
-  for (i <- 0 until sideN - 1; j <- 0 until sideP - 1)
+  for (i <- 0 until sideN; j <- 0 until sideP)
     ma.update(i, j, rng.nextFloat())
 
   val mb = new DenseMatrix[Float](sideP, sideM)
-  for (i <- 0 until sideP - 1; j <- 0 until sideM - 1)
+  for (i <- 0 until sideP; j <- 0 until sideM)
     mb.update(i, j, rng.nextFloat())
 
   if (debug) {
@@ -89,7 +89,7 @@ object OpenCLExample extends App {
 
     q.finish()
     val began = System.nanoTime()
-    q.put2DRangeKernel(kernel, 0, 0, sideN, sideM, tile, tile)
+    q.put2DRangeKernel(kernel, 0, 0, roundUpTo(sideN, tile), roundUpTo(sideM, tile), tile, tile)
     q.putReadBuffer(buf3, true)
     q.finish()
 
@@ -120,6 +120,10 @@ object OpenCLExample extends App {
       //      println(s"[$x][$y] : $r")
       //    }
     }
+  }
+
+  def roundUpTo(v: Int, modulo: Int): Int = {
+    ((v - 1) / modulo + 1) * modulo
   }
 
   def dumpBuffer(ptr: CLBuffer[FloatBuffer]): String = {
