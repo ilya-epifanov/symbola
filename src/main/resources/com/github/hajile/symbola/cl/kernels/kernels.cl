@@ -44,19 +44,34 @@ __kernel void mmultopt(__global const float* a, __global const float* bt, int n,
     float temp = 0;
 
     int ptiles = p / TILE_WIDTH;
+    int ptail = p % TILE_WIDTH;
 
     int ai = i;
     int bi = li + gj*TILE_WIDTH;
 
-    for (int tile = 0; tile < ptiles; tile++) {
+    int tile;
+    for (tile = 0; tile < ptiles; tile++) {
         int abj = TILE_WIDTH*tile+lj;
 
-        achunk[lj][li] = select(a[abj*n + ai], 0.0f, ai >= m || abj >= n);
-        bchunk[lj][li] = select(bt[abj*m + bi], 0.0f, bi >= m || abj >= n);
+        achunk[lj][li] = select(a[abj*n + ai], 0.0f, ai >= n);
+        bchunk[lj][li] = select(bt[abj*m + bi], 0.0f, bi >= m);
 
         barrier(CLK_LOCAL_MEM_FENCE);
         for (int k = 0; k < TILE_WIDTH; k++) {
            temp = mad(achunk[k][li], bchunk[k][lj], temp);
+        }
+        barrier(CLK_LOCAL_MEM_FENCE);
+    }
+
+    if (ptail != 0) {
+        int abj = TILE_WIDTH*tile+lj;
+
+        achunk[lj][li] = select(a[abj*n + ai], 0.0f, ai >= n || abj >= p);
+        bchunk[lj][li] = select(bt[abj*m + bi], 0.0f, bi >= m || abj >= p);
+
+        barrier(CLK_LOCAL_MEM_FENCE);
+        for (int k = 0; k < ptail; k++) {
+            temp = mad(achunk[k][li], bchunk[k][lj], temp);
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }

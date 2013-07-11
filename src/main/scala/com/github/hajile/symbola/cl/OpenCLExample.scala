@@ -37,8 +37,8 @@ object OpenCLExample extends App {
 
   val debug = false
   val sideN = if (debug) 3 else 1024
-  val sideM = if (debug) 4 else 1024
-  val sideP = if (debug) 2 else 1024
+  val sideM = if (debug) 3 else 1024
+  val sideP = if (debug) 3 else 1024
   val tile = 16
 
   val buf1 = ctx.createFloatBuffer(sideN * sideP, Mem.ALLOCATE_BUFFER)
@@ -47,10 +47,6 @@ object OpenCLExample extends App {
 
   val src = Resources.toString(classOf[OpenCLExample].getResource("kernels/kernels.cl"), Charsets.UTF_8)
   val program = ctx.createProgram(src)
-
-//  program.setFastRelaxedMath()
-//  program.setMadEnable()
-//  program.setUnsafeMathOptimizations()
 
   program.build("-cl-mad-enable")
 
