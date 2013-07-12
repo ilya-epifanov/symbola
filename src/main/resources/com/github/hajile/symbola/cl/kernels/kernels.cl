@@ -4,6 +4,48 @@ __kernel void ew_cos(__global const float* a, __global float* out)
     out[i] = cos(a[i]);
 }
 
+__kernel void transpose(__global float* output, __global const float* input, int cols, int rows)
+{
+    int gx = get_group_id(0);
+    int gy = get_group_id(1);
+
+    // (32, 2) is emulated by (64, 1) to ensure correct layout
+    int lx = get_local_id(0) % 32;
+    int ly = get_local_id(0) / 32;
+
+    __local float tile[32 * 33]; // + the padding element
+
+    int li = mad24(ly, 33, lx);
+    int lo = mad24(lx, 33, ly);
+
+    int in_x = mad24(gx, 32, lx);
+    int in_y = mad24(gy, 32, ly);
+
+    int input_index = mad24(in_y, cols, in_x);
+
+    int out_x = mad24(gy, 32, lx);
+    int out_y = mad24(gx, 32, ly);
+
+    int output_index = mad24(out_y, rows + 32, out_x);
+
+    int gi_stride  = cols * 2;
+    int go_stride = (rows + 32) * 2;
+
+    int li_stride  = 2 * (32 + 1);
+    int lo_stride = 2;
+
+    // load
+    for (int i = 0; i < 16; i++) {
+        tile[li] = input[input_index]; li += li_stride; input_index += gi_stride;
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    for (int i = 0; i < 16; i++) {
+        output[output_index] = tile[lo]; lo += lo_stride; output_index += go_stride;
+    }
+}
+
 /*
   matrices are in column-major format, B is transposed
 */

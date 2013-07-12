@@ -1,0 +1,9 @@
+__kernel void {{name}}(__global const float* input, __global float* out)
+{
+  int i = get_global_id(0);
+  float in = input[i];
+  {{#ops}}
+    float {{out}} = {{name}}({{in}});
+  {{/ops}}
+  out[i] = {{out}};
+}

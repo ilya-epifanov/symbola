@@ -93,18 +93,16 @@ object OpenCLExample extends App {
     println(f"Kernel executed in ${duration / 1000000.0}%.2fms")
 
     if (debug) {
+      val mbt = mb.t
+      val cpuBegan = System.nanoTime()
+      val mcref = ma * mbt
+      val cpuDuration = System.nanoTime() - cpuBegan
+      println(f"CPU naïve algorithm executed in ${cpuDuration / 1000000.0}%.2fms")
+
       val ret = buf3.getBuffer
       val mccl = new DenseMatrix[Float](sideN, sideM)
       for (i <- 0 until sideN; j <- 0 until sideM)
         mccl.update(i, j, ret.get(i + j * sideN))
-
-      //    val mbt = mb.t
-
-      //    val cpuBegan = System.nanoTime()
-      val mcref = ma * mb
-      //    val cpuDuration = System.nanoTime() - cpuBegan
-      //    println(f"CPU naïve algorithm executed in ${cpuDuration / 1000000.0}%.2fms")
-      //    mcref.hashCode()
 
       println(s"----- C (CL) -----\n\n$mccl\n\n")
       println(s"----- C (ref) -----\n\n$mcref\n\n")
