@@ -5,20 +5,21 @@ import org.scalatest.matchers.ShouldMatchers
 
 class KernelTemplateSpec extends FlatSpec with ShouldMatchers {
   "kernel template" should "render simple dot-wise function template" in {
-    val result = KernelTemplate("elementwise", Map(
+    val result = KernelTemplate("dotwise", Map(
       "name" -> "ew_sin",
-      "ops" -> Seq(Map("out" -> "e1", "name" -> "sin", "in" -> "in")),
-      "out" -> "e1"
+      "input" -> Seq("in"),
+      "ops" -> Seq(Map("out" -> "1", "name" -> "sin", "args" -> Seq("in"))),
+      "out" -> "1"
     ))
 
     result.trim should equal(
       """
-        |__kernel void ew_sin(__global const float* input, __global float* out)
+        |__kernel void ew_sin(__global const float* in_in, __global float* out)
         |{
         |  int i = get_global_id(0);
-        |  float in = input[i];
-        |  float e1 = sin(in);
-        |  out[i] = e1;
+        |  float e_in = in_in[i];
+        |  float e_1 = sin(e_in);
+        |  out[i] = e_1;
         |}""".stripMargin.trim)
   }
 }

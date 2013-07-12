@@ -1,21 +1,20 @@
 package com.github.hajile.symbola.cl.kernels
 
-import com.google.common.base.Charsets
-import com.google.common.io.Resources
-import org.fusesource.scalate.TemplateEngine
-import org.fusesource.scalate.util.{ResourceLoader, Resource}
+import freemarker.template.{Version, TemplateExceptionHandler, Configuration}
+import java.io.StringWriter
 
 object KernelTemplate {
-  private val engine = new TemplateEngine
-  engine.resourceLoader = new ResourceLoader {
-    override def resource(uri: String): Option[Resource] = {
-      val url = getClass.getResource(uri)
-
-      Some(Resource.fromText(uri, Resources.toString(url, Charsets.US_ASCII)))
-    }
-  }
+  private val cfg = new Configuration()
+  cfg.setClassForTemplateLoading(getClass, "")
+  cfg.setDefaultEncoding("UTF-8")
+  cfg.setTemplateExceptionHandler(TemplateExceptionHandler.DEBUG_HANDLER)
+  cfg.setIncompatibleImprovements(new Version("2.3.20"))
+  cfg.setObjectWrapper(new ScalaObjectWrapper)
 
   def apply(name: String, args: Map[String, Any]): String = {
-    engine.layout(s"$name.mustache", args)
+    val template = cfg.getTemplate(s"$name.ftl")
+    val ret = new StringWriter()
+    template.process(args, ret)
+    ret.toString
   }
 }
