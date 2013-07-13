@@ -1,33 +1,62 @@
 package com.github.hajile.symbola.ad
 
-import com.github.hajile.symbola.fn.ExprHasInputs._
-import com.github.hajile.symbola.fn.{InputCell, Eye, Expr, Sum}
+import com.github.hajile.symbola.fn._
 import scala.collection.immutable
 import scala.collection.immutable.SortedMap
 
 class SymbolicBackwardGradient {
-  def adjointTreesFor(gradientOf: Expr, wrt: Set[InputCell]): Map[InputCell, Expr] = {
-    SortedMap()(InputCell.OrderingByName) ++
-            SymbolicBackwardGradient.getAdjoint(gradientOf, wrt, Eye).mapValues {
+  def matrix(gradientOf: MatrixExpr, wrt: Set[M.InputCell]): Map[M.InputCell, MatrixExpr] = {
+    SortedMap()(M.InputCell.OrderingByName) ++
+            SymbolicBackwardGradient.getAdjoint(gradientOf, wrt, M.Eye).mapValues {
               es =>
-                Sum(es.toSeq)
+                M.Sum(es.toSeq)
+            }
+  }
+
+  def scalar(gradientOf: ScalarExpr, wrt: Set[S.InputCell]): Map[S.InputCell, ScalarExpr] = {
+    SortedMap()(S.InputCell.OrderingByName) ++
+            SymbolicBackwardGradient.getAdjoint(gradientOf, wrt, S.One).mapValues {
+              es =>
+                S.Sum(es.toSeq: _*)
             }
   }
 }
 
 object SymbolicBackwardGradient {
-  private def getAdjoint(node: Expr, wrt: Set[InputCell], seed: Expr): immutable.HashMap[InputCell, Set[Expr]] = {
-    val in = inputs(node)
-    val adjoints: Seq[immutable.HashMap[InputCell, Set[Expr]]] = in.collect {
-      case i: InputCell if wrt.contains(i) =>
-        immutable.HashMap[InputCell, Set[Expr]](i -> Set(node.backwardsExpr(seed, i)))
-      case i: InputCell =>
-        immutable.HashMap[InputCell, Set[Expr]]()
+  private def getAdjoint(node: MatrixExpr, wrt: Set[M.InputCell], seed: MatrixExpr): immutable.HashMap[M.InputCell, Set[MatrixExpr]] = {
+    val in = MatrixExprHasInputs.inputs(node)
+    val adjoints: Seq[immutable.HashMap[M.InputCell, Set[MatrixExpr]]] = in.collect {
+      case i: M.InputCell if wrt.contains(i) =>
+        immutable.HashMap[M.InputCell, Set[MatrixExpr]](i -> Set(node.grad(seed, i)))
+      case i: M.InputCell =>
+        immutable.HashMap[M.InputCell, Set[MatrixExpr]]()
       case e =>
-        getAdjoint(e, wrt, node.backwardsExpr(seed, e))
+        getAdjoint(e, wrt, node.grad(seed, e))
     }
     if (adjoints.isEmpty)
-      immutable.HashMap[InputCell, Set[Expr]]()
+      immutable.HashMap[M.InputCell, Set[MatrixExpr]]()
+    else
+      adjoints.reduce {
+        (a, b) =>
+          a.merged(b) {
+            case ((k1, v1), (_, v2)) =>
+              k1 -> (v1 ++ v2)
+          }
+      }
+  }
+
+  private def getAdjoint(node: ScalarExpr, wrt: Set[S.InputCell], seed: ScalarExpr): immutable.HashMap[S.InputCell, Set[ScalarExpr]] = {
+    val in = ScalarExprHasInputs.inputs(node)
+    val adjoints: Seq[immutable.HashMap[S.InputCell, Set[ScalarExpr]]] = in.collect {
+      case i: S.InputCell if wrt.contains(i) =>
+        immutable.HashMap[S.InputCell, Set[ScalarExpr]](i -> Set(node.grad(seed, i)))
+      case i: S.InputCell =>
+        immutable.HashMap[S.InputCell, Set[ScalarExpr]]()
+      case e =>
+        getAdjoint(e, wrt, node.grad(seed, e))
+    }
+    if (adjoints.isEmpty)
+      immutable.HashMap[S.InputCell, Set[ScalarExpr]]()
     else
       adjoints.reduce {
         (a, b) =>

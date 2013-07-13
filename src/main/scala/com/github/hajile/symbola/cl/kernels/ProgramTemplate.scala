@@ -2,8 +2,9 @@ package com.github.hajile.symbola.cl.kernels
 
 import freemarker.template.{Version, TemplateExceptionHandler, Configuration}
 import java.io.StringWriter
+import com.google.common.base.Strings
 
-object KernelTemplate {
+object ProgramTemplate {
   private val cfg = new Configuration()
   cfg.setClassForTemplateLoading(getClass, "")
   cfg.setDefaultEncoding("UTF-8")
@@ -11,7 +12,7 @@ object KernelTemplate {
   cfg.setIncompatibleImprovements(new Version("2.3.20"))
   cfg.setObjectWrapper(new ScalaObjectWrapper)
 
-  def apply(name: String, args: Map[String, Any]): String = {
+  def apply(name: String, args: Any): String = {
     val template = cfg.getTemplate(s"$name.ftl")
     val ret = new StringWriter()
     template.process(args, ret)

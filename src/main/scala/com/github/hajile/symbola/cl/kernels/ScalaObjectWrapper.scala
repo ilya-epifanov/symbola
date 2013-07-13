@@ -140,6 +140,8 @@ class ScalaBaseWrapper(val obj: Any, val wrapper: ObjectWrapper)
     val o = obj.asInstanceOf[Object]
     if (key.startsWith("$"))
       return wrapper.wrap(null)
+    if (key == "class")
+      return wrapper.wrap(o.getClass)
     findField(objectClass, key) match {
       case Some(field) => return wrapper.wrap(field.get(o))
       case _ =>

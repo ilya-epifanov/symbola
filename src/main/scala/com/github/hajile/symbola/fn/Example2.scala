@@ -28,11 +28,13 @@ object Example2 extends App {
 
   val expr = new ExprGraph(ctx)
 
-  val x1 = expr.in("x1", Matrix)
+  val x1 = expr.in("x1")
   //  val x2 = expr.in("x2", Matrix)
   //  val x3 = expr.in("x3", Matrix)
 
-  val e1 = Prod(Cos(x1), x1)
+  val d1 = S.InputCell("x")
+
+  val e1 = M.Prod(M.Dotwise1(x1, S.Cos(d1), d1), x1)
 
   expr.out("f", e1)
 
@@ -43,8 +45,8 @@ object Example2 extends App {
   val rnd = new Random()
 
   val buf1 = expr.getIn("x1", RealizedMatrix(rows, cols))
-  for (i <- 0 until (rows * cols)) {
-    buf1.put(i, rnd.nextGaussian().toFloat)
+  for (i <- 0 until rows; j <- 0 until cols) {
+    buf1.put(i, j, rnd.nextGaussian().toFloat)
   }
   expr.writeIn("x1")
 

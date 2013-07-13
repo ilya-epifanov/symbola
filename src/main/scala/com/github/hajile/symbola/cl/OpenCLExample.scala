@@ -12,28 +12,8 @@ import scala.util.Random
 
 class OpenCLExample
 
-object OpenCLExample extends App {
-  val platformString = if (args.length >= 1) args(0).toLowerCase else ""
+object OpenCLExample extends OpenCLApp {
   val kernelName = if (args.length >= 2) args(1) else "mmultopt"
-
-  for (p <- CLPlatform.listCLPlatforms()) {
-    println("Platform: " + p.getName)
-    for (d <- p.listCLDevices(Type.ALL)) {
-      println(s"  Device: ${d.getName} [${d.isAvailable}]")
-    }
-  }
-
-  val device = CLPlatform.getDefault(new Filter[CLPlatform] {
-    def accept(item: CLPlatform) = {
-      val name = item.getName
-      name.toLowerCase.contains(platformString)
-    }
-  }).getMaxFlopsDevice
-
-  println(s"Using device: $device")
-  val ctx = CLContext.create(device)
-
-  val q = device.createCommandQueue()
 
   val debug = false
   val sideN = if (debug) 3 else 1024

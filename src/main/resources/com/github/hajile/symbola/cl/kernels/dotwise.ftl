@@ -1,11 +1,22 @@
-__kernel void ${name}(<#list input as i>__global const float* in_${i}, </#list>__global float* out)
+<#include "common.cl">
+
+__kernel void ${name}(<#list input as i>__global const restrict float* in_${i}, </#list>__global restrict float* out)
 {
-  int i = get_global_id(0);
+  const int i = get_global_id(0);
 <#list input as i>
-  float e_${i} = in_${i}[i];
+  const float e_${i} = in_${i}[i];
 </#list>
 <#list ops as o>
-  float e_${o.out} = ${o.name}(<#list o.args as i>e_${i}<#if i_has_next>, </#if></#list>);
+<#switch o.class.getSimpleName>
+<#case "ScalarOp">
+  const float e_${o.out} = ${o.name}(<#list o.args as i>e_${i}<#if i_has_next>, </#if></#list>);
+<#break>
+<#case "ConstOp">
+  const float e_${o.out} = ${o.value};
+<#break>
+<#default>
+// can't handle ${o.class.getSimpleName}
+</#switch>
 </#list>
   out[i] = e_${out};
 }
