@@ -13,17 +13,20 @@ import scala.util.Random
 class OpenCLExample
 
 object OpenCLExample extends OpenCLApp {
-  val kernelName = if (args.length >= 2) args(1) else "mmultopt"
+//  val kernelName = if (args.length >= 2) args(1) else "mmultopt"
 
-  val debug = false
-  val sideN = if (debug) 3 else 1024
-  val sideM = if (debug) 3 else 1024
-  val sideP = if (debug) 3 else 1024
-  val tile = 16
+  println(s"Available local memory: ${device.getLocalMemSize}")
 
-  val buf1 = ctx.createFloatBuffer(sideN * sideP, Mem.ALLOCATE_BUFFER)
-  val buf2 = ctx.createFloatBuffer(sideP * sideM, Mem.ALLOCATE_BUFFER)
-  val buf3 = ctx.createFloatBuffer(sideN * sideM, Mem.ALLOCATE_BUFFER)
+  val debug = true
+  val tile = if (debug) 2 else 16
+  val tileSize = tile * tile
+  val sideN = if (debug) tile*1 else roundUpTo(1024, tile)
+  val sideM = if (debug) tile*2 else roundUpTo(1024, tile)
+  val sideP = if (debug) tile*3 else roundUpTo(1024, tile)
+
+  val buf1 = ctx.createFloatBuffer(sideN/tile * sideP/tile * tileSize, Mem.ALLOCATE_BUFFER, Mem.READ_ONLY)
+  val buf2 = ctx.createFloatBuffer(sideP/tile * sideM/tile * tileSize, Mem.ALLOCATE_BUFFER, Mem.READ_ONLY)
+  val buf3 = ctx.createFloatBuffer(sideN/tile * sideM/tile * tileSize, Mem.ALLOCATE_BUFFER, Mem.WRITE_ONLY)
 
   val src = Resources.toString(classOf[OpenCLExample].getResource("kernels/kernels.cl"), Charsets.UTF_8)
   val program = ctx.createProgram(src)
@@ -40,16 +43,13 @@ object OpenCLExample extends OpenCLApp {
 
   val rng = new Random(0)
   val ma = new DenseMatrix[Float](sideN, sideP)
-  for (i <- 0 until sideN; j <- 0 until sideP)
+  for (i <- 0 until sideN; j <- 0 until sideP) {
     ma.update(i, j, rng.nextFloat())
+  }
 
   val mb = new DenseMatrix[Float](sideP, sideM)
-  for (i <- 0 until sideP; j <- 0 until sideM)
+  for (i <- 0 until sideP; j <- 0 until sideM) {
     mb.update(i, j, rng.nextFloat())
-
-  if (debug) {
-    println(s"----- A -----\n\n$ma\n\n")
-    println(s"----- B -----\n\n$mb\n\n")
   }
 
   for (i <- 0 until (if (debug) 1 else 5)) {
@@ -60,12 +60,35 @@ object OpenCLExample extends OpenCLApp {
     for (i <- 0 until sideP; j <- 0 until sideM)
       ptr2.put(i * sideM + j, mb(i, j))
 
+//    for (bi <- 0 until sideN/tile; bj <- 0 until sideP/tile) {
+//      val b = roundUpTo(tile * tile * (bi * sideP / tile + bj), tileSize)
+//      for (i <- 0 until tile; j <- 0 until tile) {
+//        ptr1.put(b + i + j * tile, ma(bi * tile + i, bj * tile + j))
+//      }
+//    }
+//    for (bi <- 0 until sideP/tile; bj <- 0 until sideM/tile) {
+////      val b = roundUpTo(tile * tile * (bi * sideM / tile + bj), tileSize)
+////      for (i <- 0 until tile; j <- 0 until tile) {
+////        ptr2.put(b + i + j * tile, mb(bi * tile + i, bj * tile + j))
+////      }
+//      val b = roundUpTo((tile * tile) * (bi + bj * sideP / tile), tileSize)
+//      for (i <- 0 until tile; j <- 0 until tile) {
+//        ptr2.put(b + i * tile + j, mb(bi * tile + i, bj * tile + j))
+//      }
+//    }
+    if (debug) {
+      println(s"----- A -----\n\n$ma\n\n")
+      println(s"-- A bytes --\n\n${dumpBuffer(buf1)}\n\n")
+      println(s"----- B -----\n\n$mb\n\n")
+      println(s"-- B bytes --\n\n${dumpBuffer(buf2)}\n\n")
+    }
+
     q.putWriteBuffer(buf1, true)
     q.putWriteBuffer(buf2, true)
 
     q.finish()
     val began = System.nanoTime()
-    q.put2DRangeKernel(kernel, 0, 0, roundUpTo(sideN, tile), roundUpTo(sideM, tile), tile, tile)
+    q.put1DRangeKernel(kernel, 0, roundUpTo(sideN, tile) * roundUpTo(sideM, tile), tile * tile)
     q.putReadBuffer(buf3, true)
     q.finish()
 
@@ -73,9 +96,8 @@ object OpenCLExample extends OpenCLApp {
     println(f"Kernel executed in ${duration / 1000000.0}%.2fms")
 
     if (debug) {
-      val mbt = mb.t
       val cpuBegan = System.nanoTime()
-      val mcref = ma * mbt
+      val mcref = ma * mb
       val cpuDuration = System.nanoTime() - cpuBegan
       println(f"CPU naïve algorithm executed in ${cpuDuration / 1000000.0}%.2fms")
 
@@ -84,7 +106,16 @@ object OpenCLExample extends OpenCLApp {
       for (i <- 0 until sideN; j <- 0 until sideM)
         mccl.update(i, j, ret.get(i + j * sideN))
 
+//      for (bi <- 0 until sideN/tile; bj <- 0 until sideM/tile) {
+//        val b = roundUpTo((tile * tile) * (bi * sideM / tile + bj), tileSize)
+//        for (i <- 0 until tile; j <- 0 until tile) {
+//          mccl.update(bi * tile + i, bj * tile + j, ret.get(b + i + j * tile))
+//        }
+//      }
+
       println(s"----- C (CL) -----\n\n$mccl\n\n")
+      println(s"----- C bytes ----\n\n${dumpBuffer(buf3)}\n\n")
+
       println(s"----- C (ref) -----\n\n$mcref\n\n")
 
       //    for (j <- 0 until ret.limit()) {
@@ -97,8 +128,14 @@ object OpenCLExample extends OpenCLApp {
   }
 
   def roundUpTo(v: Int, modulo: Int): Int = {
-    ((v - 1) / modulo + 1) * modulo
+    (ifloordiv(v - 1, modulo) + 1) * modulo
   }
+
+  def ifloordiv(n: Int, d: Int): Int = {
+      if (n >= 0) n / d
+      else ~(~n / d)
+  }
+
 
   def dumpBuffer(ptr: CLBuffer[FloatBuffer]): String = {
     val buf = ptr.getBuffer

@@ -43,6 +43,16 @@ object MatrixExpr {
     override def toString = "I"
   }
 
+  case object One extends MatrixExpr {
+    def grad(seed: MatrixExpr, in: MatrixExpr) = sys.error("Cannot get here")
+    override def toString = "[1]"
+  }
+
+  case object Zero extends MatrixExpr {
+    def grad(seed: MatrixExpr, in: MatrixExpr) = sys.error("Cannot get here")
+    override def toString = "[0]"
+  }
+
   case class Sum(e: Seq[MatrixExpr]) extends MatrixExpr {
     //  def apply() = e.map(_()).reduce((a, b) => a + b)
     def grad(seed: MatrixExpr, wrt: MatrixExpr) = seed
@@ -78,7 +88,7 @@ object MatrixExpr {
   case class Dotwise1(e: MatrixExpr, s: ScalarExpr, in: S.InputCell) extends MatrixExpr {
     def grad(seed: MatrixExpr, wrt: MatrixExpr) = {
       val grad = S.Grad(s, Set(in))
-      Dotwise1(e, s.grad(S.One, grad(in)), in)
+      Dotwise1(e, grad(in), in)
     }
     override def toString = f"∘($e, $s)"
   }
@@ -86,5 +96,6 @@ object MatrixExpr {
   case class Grad(e: MatrixExpr, wrt: Set[M.InputCell]) {
     private val grads = new SymbolicBackwardGradient().matrix(e, wrt)
     def apply(wrt: M.InputCell): MatrixExpr = grads(wrt)
+    override def toString = f"""∇($e|${wrt.mkString(",")})"""
   }
 }

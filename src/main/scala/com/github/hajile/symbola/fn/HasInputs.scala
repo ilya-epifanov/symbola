@@ -5,6 +5,20 @@ trait HasInputs[E <: Expr[E]] {
   def map(expr: E, fn: (E) => E): E
 }
 
+object HasInputs {
+  implicit val matrixExprHasInputs = MatrixExprHasInputs
+  implicit val scalarExprHasInputs = ScalarExprHasInputs
+}
+
+//object ExprHasInputs extends HasInputs[Expr[_]] {
+//  def inputs(expr: Expr[_]): Seq[Expr[_]] = expr match {
+//    case e: MatrixExpr => MatrixExprHasInputs.inputs(e)
+//    case e: ScalarExpr => ScalarExprHasInputs.inputs(e)
+//  }
+//
+//  def map(expr: Expr[_], fn: (Expr[_]) => Expr[_]) = ???
+//}
+
 object MatrixExprHasInputs extends HasInputs[MatrixExpr] {
   def inputs(expr: MatrixExpr) = expr match {
     case M.Sum(es) => es
@@ -13,6 +27,8 @@ object MatrixExprHasInputs extends HasInputs[MatrixExpr] {
     case M.Dotwise1(e, _, _) => Seq(e)
     case i: M.InputCell => Seq()
     case M.Eye => Seq()
+    case M.Zero => Seq()
+    case M.One => Seq()
   }
 
   def map(expr: MatrixExpr, fn: (MatrixExpr) => MatrixExpr): MatrixExpr = expr match {
@@ -22,6 +38,8 @@ object MatrixExprHasInputs extends HasInputs[MatrixExpr] {
     case M.Dotwise1(e, s, si) => M.Dotwise1(fn(e), s, si)
     case i: M.InputCell => i
     case M.Eye => M.Eye
+    case M.Zero => M.Zero
+    case M.One => M.One
   }
 }
 
@@ -29,7 +47,7 @@ object ScalarExprHasInputs extends HasInputs[ScalarExpr] {
   def inputs(expr: ScalarExpr) = expr match {
     case S.Sin(e) => Seq(e)
     case S.Cos(e) => Seq(e)
-    case S.Sum(es: Seq[ScalarExpr]) => es
+    case S.Sum(es@_*) => es
     case S.Mul(e1, e2) => Seq(e1, e2)
     case S.Div(e1, e2) => Seq(e1, e2)
     case S.Pow(e1, e2) => Seq(e1, e2)
@@ -44,7 +62,7 @@ object ScalarExprHasInputs extends HasInputs[ScalarExpr] {
   def map(expr: ScalarExpr, fn: (ScalarExpr) => ScalarExpr): ScalarExpr = expr match {
     case S.Sin(e) => S.Sin(fn(e))
     case S.Cos(e) => S.Cos(fn(e))
-    case S.Sum(es: Seq[ScalarExpr]) => S.Sum(es.map(fn): _*)
+    case S.Sum(es@_*) => S.Sum(es.map(fn): _*)
     case S.Mul(e1, e2) => S.Mul(fn(e1), fn(e2))
     case S.Div(e1, e2) => S.Div(fn(e1), fn(e2))
     case S.Pow(e1, e2) => S.Pow(fn(e1), fn(e2))

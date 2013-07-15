@@ -116,5 +116,6 @@ object ScalarExpr {
   case class Grad(e: ScalarExpr, wrt: Set[S.InputCell]) {
     private val grads = new SymbolicBackwardGradient().scalar(e, wrt)
     def apply(wrt: S.InputCell): ScalarExpr = grads(wrt)
+    override def toString = f"""∇($e|${wrt.mkString(",")})"""
   }
 }

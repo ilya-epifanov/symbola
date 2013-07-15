@@ -67,56 +67,40 @@ __kernel void mmul(__global const float* a, __global const float* b, int dot_dim
 /*
   matrices are in column-major format, B is transposed
 */
-#define TILE_WIDTH 16
-__kernel void mmultopt(__global const float* a, __global const float* bt, int n, int m, int p, __global float* out)
+#define TILE_WIDTH 2
+__kernel void mmultopt(__global const float* restrict a, __global const float* restrict bt, int n, int m, int p, __global float* restrict out)
 {
-    int i = get_global_id(0); // row (A row)
-    int j = get_global_id(1); // column (B row)
+    int i = get_global_id(0) % TILE_WIDTH; // column (B row)
+    int j = get_global_id(0) / TILE_WIDTH; // row (A row)
 
-    __local float achunk[TILE_WIDTH][TILE_WIDTH];
-    __local float bchunk[TILE_WIDTH][TILE_WIDTH];
+    __local float achunk[TILE_WIDTH*TILE_WIDTH];
+    __local float bchunk[TILE_WIDTH*TILE_WIDTH];
 
-    int li = get_local_id(0);
-    int lj = get_local_id(1);
+    int li = get_local_id(0) % TILE_WIDTH;
+    int lj = get_local_id(0) / TILE_WIDTH;
 
-    int gi = get_group_id(0);
-    int gj = get_group_id(1);
+    int gi = get_group_id(0) % TILE_WIDTH;
+    int gj = get_group_id(0) / TILE_WIDTH;
 
     float temp = 0;
 
     int ptiles = p / TILE_WIDTH;
-    int ptail = p % TILE_WIDTH;
 
     int ai = i;
     int bi = li + gj*TILE_WIDTH;
 
-    int tile;
-    for (tile = 0; tile < ptiles; tile++) {
+    for (int tile = 0; tile < ptiles; tile++) {
         int abj = TILE_WIDTH*tile+lj;
 
-        achunk[lj][li] = select(a[abj*n + ai], 0.0f, ai >= n);
-        bchunk[lj][li] = select(bt[abj*m + bi], 0.0f, bi >= m);
-
+        achunk[lj*TILE_WIDTH + li] = a[abj*n + ai];
+        bchunk[lj*TILE_WIDTH + li] = bt[abj*m + bi];
         barrier(CLK_LOCAL_MEM_FENCE);
+
         for (int k = 0; k < TILE_WIDTH; k++) {
-           temp = mad(achunk[k][li], bchunk[k][lj], temp);
+           temp = mad(achunk[k*TILE_WIDTH + li], bchunk[k*TILE_WIDTH + lj], temp);
         }
         barrier(CLK_LOCAL_MEM_FENCE);
     }
 
-    if (ptail != 0) {
-        int abj = TILE_WIDTH*tile+lj;
-
-        achunk[lj][li] = select(a[abj*n + ai], 0.0f, ai >= n || abj >= p);
-        bchunk[lj][li] = select(bt[abj*m + bi], 0.0f, bi >= m || abj >= p);
-
-        barrier(CLK_LOCAL_MEM_FENCE);
-        for (int k = 0; k < ptail; k++) {
-            temp = mad(achunk[k][li], bchunk[k][lj], temp);
-        }
-        barrier(CLK_LOCAL_MEM_FENCE);
-    }
-
-    if (i < n && j < m)
-        out[i + j*n] = temp;
+    out[j*n + i] = temp;
 }

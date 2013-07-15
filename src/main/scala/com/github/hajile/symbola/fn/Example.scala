@@ -20,7 +20,13 @@ object Example extends App {
 //  println("f = " + numerics.sin(in1.get) * (in3.get * in2.get))
 
   val s1 = S.InputCell("x")
-  val sin = S.Sin(s1)
+  val s2 = S.InputCell("y")
+  val sin = S.Div(s1, s2)
+
+  val sgrad = S.Grad(sin, Set(s1, s2))
+  DotVisualizer.visualize("Scalar", Seq(sin, sgrad(s1), sgrad(s2)): _*)
+  DotVisualizer.visualize("Scalar-Optimized", GraphOptimizer.optimizeScalar(sin, sgrad(s1), sgrad(s2)): _*)
+
 
   val expr = M.Prod(M.Dotwise1(in1, sin, s1), M.Prod(in3, in2))
 

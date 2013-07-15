@@ -33,7 +33,11 @@ object GraphOptimizer {
       case M.Sum(es) if es.size == 1 =>
         forwardPass(es(0))
       case M.Dotwise1(e, s, si) =>
-        M.Dotwise1(forwardPass(e), optimizeScalar(s), si)
+        optimizeScalar(s) match {
+          case S.One => M.One
+          case S.Zero => M.Zero
+          case s => M.Dotwise1(forwardPass(e), s, si)
+        }
       case e =>
         MatrixExprHasInputs.map(e, forwardPass)
     })
@@ -42,6 +46,11 @@ object GraphOptimizer {
   def optimizeScalar[A](expr: ScalarExpr): ScalarExpr = {
     implicit val cache = mutable.HashMap[ScalarExpr, ScalarExpr]()
     forwardPass(expr)
+  }
+
+  def optimizeScalar[A](exprs: ScalarExpr*): Seq[ScalarExpr] = {
+    implicit val cache = mutable.HashMap[ScalarExpr, ScalarExpr]()
+    exprs.map(forwardPass)
   }
 
   def optimizeScalar[A](expr: Map[A, ScalarExpr]): Map[A, ScalarExpr] = {
@@ -73,10 +82,16 @@ object GraphOptimizer {
             S.Zero
           case _ => s
         }
-      case S.Sum(es: Seq[ScalarExpr]) if es.size == 1 =>
+      case S.Sum(es@_*) if es.size == 1 =>
         forwardPass(es(0))
-      case S.Sum(es: Seq[ScalarExpr]) =>
+      case S.Sum(es@_*) =>
         forwardPass(S.Sum(es.map(forwardPass).filter(_ != S.Zero): _*))
+      case S.Div(e1, S.One) =>
+        forwardPass(e1)
+      case S.Div(S.Zero, e2) =>
+        S.Zero
+      case S.Div(e1, e2) if e1 == e2 => // Not actually correct
+        S.One
       case e =>
         ScalarExprHasInputs.map(e, forwardPass)
     })
