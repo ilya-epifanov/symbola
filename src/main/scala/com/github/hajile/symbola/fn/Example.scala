@@ -27,11 +27,9 @@ object Example extends App {
   DotVisualizer.visualize("Scalar", Seq(sin, sgrad(s1), sgrad(s2)): _*)
   DotVisualizer.visualize("Scalar-Optimized", GraphOptimizer.optimizeScalar(sin, sgrad(s1), sgrad(s2)): _*)
 
-
   val expr = M.Prod(M.Dotwise1(in1, sin, s1), M.Prod(in3, in2))
 
   val grad = M.Grad(expr, Set(in1, in2, in3))
-
 
 //  println(s"f = ${expr()}")
 //  println(s"numeric: ${new NumericGradient(1.0e-10, expr, in1, in2, in3)()}")
