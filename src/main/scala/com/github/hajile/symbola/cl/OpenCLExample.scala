@@ -16,7 +16,7 @@ object OpenCLExample extends OpenCLApp {
 
   println(s"Available local memory: ${device.getLocalMemSize}")
 
-  val debug = false
+  val debug = true
   val tile = if (debug) 4 else 16
   val tileSize = tile * tile
   val sideN = if (debug) tile*3 else roundUpTo(1024, tile)
@@ -88,7 +88,7 @@ object OpenCLExample extends OpenCLApp {
 
     q.finish()
     val began = System.nanoTime()
-    q.put1DRangeKernel(kernel, 0, roundUpTo(sideN, tile) * roundUpTo(sideM, tile) / 4, tile * tile / 4)
+    q.put1DRangeKernel(kernel, 0, sideN * sideM / 4, tile * tile / 4)
     q.putReadBuffer(buf3, true)
     q.finish()
 
@@ -114,7 +114,7 @@ object OpenCLExample extends OpenCLApp {
       //        }
       //      }
 
-      println(s"----- C (CL) -----\n\n${mccl.toString(8, 200)}\n\n")
+      println(s"----- C (CL) -----\n\n${mccl.toString(16, 200)}\n\n")
       println(s"----- C bytes ----\n\n${dumpBuffer(buf3)}\n\n")
 
       println(s"----- C (ref) -----\n\n$mcref\n\n")

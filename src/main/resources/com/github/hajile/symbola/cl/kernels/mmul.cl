@@ -14,7 +14,7 @@
  b: m*p
  o: n*m
 */
-__kernel void mmul(__global float* out, __global const float* restrict a, __global const float* restrict bt, int n, int m, int p)
+__kernel void mmul(__global float* out, __global float const* a, __global float const* bt, int n, int m, int p)
 {
   int tn = n / TILE_SIDE;
   int tm = m / TILE_SIDE;
@@ -35,29 +35,43 @@ __kernel void mmul(__global float* out, __global const float* restrict a, __glob
   // 0            0   0
   // 1            0   0
   // 2            0   0
-  int osgi = get_global_id(0) % (n / 2);
-  int osgj = get_global_id(0) / (n / 2);
+//  int osgi = get_global_id(0) % (n / 2);
+//  int osgj = get_global_id(0) / (n / 2);
 
-  int oti = osgi / (TILE_SIDE / 2); // TSxTS block row
-  int otj = osgj / (TILE_SIDE / 2); // TSxTS block col
+  int oti = get_group_id(0) % (n / 4); // TSxTS block row
+  int otj = get_group_id(0) / (n / 4); // TSxTS block col
 
-  int osi = osgi % (TILE_SIDE / 2); // 2x2 matrix row inside a TSxTS block
-  int osj = osgj % (TILE_SIDE / 2); // ----""---- col -""-
+  int osi = get_local_id(0) / (TILE_SIDE / 2); // 2x2 matrix row inside a TSxTS block
+  int osj = get_local_id(0) % (TILE_SIDE / 2); // ----""---- col -""-
 
   __global float* otile = out + TILEOFFSET(oti, otj, tm);
   __global float* osubm = otile + ROWMAJOR(osi, osj, TILE_SIDE/2);
 
-  float temp00 = 0.0, temp01 = 0.0, temp10 = 0.0, temp11 = 0.0;
-  // enumerating tiles
+//  __local float atile[TILE_AREA];
+//  __local float btile[TILE_AREA];
 
+  float temp00 = 0.0, temp01 = 0.0, temp10 = 0.0, temp11 = 0.0;
+
+  // enumerating tiles
   for (int pp = 0; pp < tp; pp++) {
     __global const float* atile = a + TILEOFFSET(oti, pp, tp);
     __global const float* btile = bt + TILEOFFSET(otj, pp, tp);
+//    __global const float* atile_g = a + TILEOFFSET(oti, pp, tp);
+//    __global const float* btile_g = bt + TILEOFFSET(otj, pp, tp);
+
+//    barrier(CLK_GLOBAL_MEM_FENCE);
+//    for (int i = 0; i < 32; i++)
+//      atile[get_local_id(0) + i*SUB_STRIDE] = atile_g[get_local_id(0) + i*SUB_STRIDE];
+//    for (int i = 0; i < 32; i++)
+//      btile[get_local_id(0) + i*SUB_STRIDE] = btile_g[get_local_id(0) + i*SUB_STRIDE];
+//    barrier(CLK_LOCAL_MEM_FENCE);
 
     // enumerating 2x2 submatrices
     for (int ppp = 0; ppp < TILE_SIDE/2; ppp++) {
       __global const float* asubm = atile + ROWMAJOR(osi, ppp, TILE_SIDE/2);
       __global const float* bsubm = btile + ROWMAJOR(osj, ppp, TILE_SIDE/2);
+//      __local const float* asubm = atile + ROWMAJOR(osi, ppp, TILE_SIDE/2);
+//      __local const float* bsubm = btile + ROWMAJOR(osj, ppp, TILE_SIDE/2);
 
       float a00 = asubm[SUB_STRIDE*0];
       float a01 = asubm[SUB_STRIDE*2];
@@ -74,22 +88,8 @@ __kernel void mmul(__global float* out, __global const float* restrict a, __glob
       temp10 += a10*b00 + a11*b10;
       temp11 += a10*b01 + a11*b11;
     }
+    barrier(CLK_LOCAL_MEM_FENCE);
   }
-
-//  if (true) {
-//    float marker = NAN;
-//    osubm[0] = marker;
-//    osubm[SUB_STRIDE] = marker;
-//    osubm[SUB_STRIDE*2] = marker;
-//    osubm[SUB_STRIDE*3] = marker;
-//  }
-
-//  float baset = 100;
-//  float bases = 2;
-//  osubm[SUB_STRIDE*0] = osi + osj * 0.1;
-//  osubm[SUB_STRIDE*1] = baset + oti + otj * 0.1;
-//  osubm[SUB_STRIDE*2] = NAN;
-//  osubm[SUB_STRIDE*3] = osgi + osgj * 0.1;
 
   osubm[SUB_STRIDE*0] = temp00;
   osubm[SUB_STRIDE*2] = temp01;
