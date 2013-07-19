@@ -17,12 +17,12 @@ object OpenCLExample extends OpenCLApp {
   println(s"Available local memory: ${device.getLocalMemSize}")
 
   val debug = false
-  val check = false
+  val check = true
   val tile = if (debug) 32 else 32
   val tileSize = tile * tile
-  val sideN = if (debug) tile*2 else roundUpTo(1024, tile)
-  val sideM = if (debug) tile*3 else roundUpTo(1024, tile)
-  val sideP = if (debug) tile*4 else roundUpTo(1024, tile)
+  val sideN = if (debug) tile*2 else roundUpTo(256, tile)
+  val sideM = if (debug) tile*3 else roundUpTo(160, tile)
+  val sideP = if (debug) tile*4 else roundUpTo(384, tile)
 
   val buf1 = ctx.createFloatBuffer(sideN / tile * sideP / tile * tileSize, Mem.ALLOCATE_BUFFER, Mem.READ_ONLY)
   val buf2 = ctx.createFloatBuffer(sideP / tile * sideM / tile * tileSize, Mem.ALLOCATE_BUFFER, Mem.READ_ONLY)
@@ -44,12 +44,12 @@ object OpenCLExample extends OpenCLApp {
   val rng = new Random(0)
   val ma = new DenseMatrix[Float](sideN, sideP)
   for (i <- 0 until sideN; j <- 0 until sideP) {
-    ma.update(i, j, /*rng.nextFloat()*/ (i + 0.1*j).toFloat)
+    ma.update(i, j, rng.nextFloat()/*(i + 0.1*j).toFloat*/)
   }
 
   val mb = new DenseMatrix[Float](sideP, sideM)
   for (i <- 0 until sideP; j <- 0 until sideM) {
-    mb.update(i, j, if (i != j) 0.5f else 0.1f/*rng.nextFloat()*/)
+    mb.update(i, j, /*if (i != j) 0.5f else 0.1f*/rng.nextFloat())
   }
 
   for (i <- 0 until (if (debug) 1 else 10)) {

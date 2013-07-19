@@ -49,8 +49,6 @@ __kernel void mmul(__global float* out, __global float const* a, __global float 
   int osi = get_local_id(0) / (TILE_SIDE / 2); // 2x2 matrix row inside a TSxTS block
   int osj = get_local_id(0) % (TILE_SIDE / 2); // ----""---- col -""-
 
-//  printf("oti: %d, otj: %d, osi: %d, osj: %d\n", oti, otj, osi, osj);
-
   __global float* otile = out + TILEOFFSET(oti, otj, tm);
   __global float* osubm = otile + ROWMAJOR(osi, osj, TILE_SIDE/2);
 
@@ -61,8 +59,6 @@ __kernel void mmul(__global float* out, __global float const* a, __global float 
 
   // enumerating tiles
   for (int pp = 0; pp < tp; pp++) {
-//    __global const float* atile = a + TILEOFFSET(oti, pp, tp);
-//    __global const float* btile = bt + TILEOFFSET(otj, pp, tp);
     __global const float* atile_g = a + TILEOFFSET(oti, pp, tp);
     __global const float* btile_g = bt + TILEOFFSET(otj, pp, tp);
 
@@ -77,8 +73,6 @@ __kernel void mmul(__global float* out, __global float const* a, __global float 
 
     // enumerating 2x2 submatrices
     for (int ppp = 0; ppp < TILE_SIDE/2; ppp++) {
-//      __global const float* asubm = atile + ROWMAJOR(osi, ppp, TILE_SIDE/2);
-//      __global const float* bsubm = btile + ROWMAJOR(osj, ppp, TILE_SIDE/2);
       __local const float* asubm = atile + ROWMAJOR(osi, ppp, TILE_SIDE/2);
       __local const float* bsubm = btile + ROWMAJOR(osj, ppp, TILE_SIDE/2);
 
@@ -96,11 +90,6 @@ __kernel void mmul(__global float* out, __global float const* a, __global float 
       temp01 = mad(a00, b01, temp01); temp01 = mad(a01, b11, temp01);
       temp10 = mad(a10, b00, temp10); temp10 = mad(a11, b10, temp10);
       temp11 = mad(a10, b01, temp11); temp11 = mad(a11, b11, temp11);
-
-//      temp00 += a00*b00 + a01*b10;
-//      temp01 += a00*b01 + a01*b11;
-//      temp10 += a10*b00 + a11*b10;
-//      temp11 += a10*b01 + a11*b11;
     }
     barrier(CLK_LOCAL_MEM_FENCE);
   }
