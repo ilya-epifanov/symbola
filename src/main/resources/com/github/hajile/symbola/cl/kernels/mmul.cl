@@ -2,15 +2,21 @@
 #define TILE_AREA (TILE_SIDE*TILE_SIDE)
 #define SUB_STRIDE (TILE_AREA/4)
 
-//#define ROWMAJOR(i, j, side) mad24(side, i, j)
-//#define COLMAJOR(i, j, side) mad24(side, j, i)
-//
-//#define TILEOFFSET(ti, tj, side) mul24(ROWMAJOR(ti, tj, side), TILE_AREA)
-
 #define ROWMAJOR(i, j, side) (side*i + j)
 #define COLMAJOR(i, j, side) (side*j + i)
-
 #define TILEOFFSET(ti, tj, side) (ROWMAJOR(ti, tj, side) * TILE_AREA)
+
+#define PRECISION 0
+
+#if PRECISION == 2
+#define acc(x, y, z) fma(x, y, z)
+#elif (PRECISION == 1) && FP_FAST_FMAF
+#define acc(x, y, z) fma(x, y, z)
+#elif PRECISION == 1
+#define acc(x, y, z) ((x)*(y) + (z))
+#else
+#define acc(x, y, z) mad(x, y, z)
+#endif
 
 /*
  TILE_SIDE x TILE_SIDE threads process 2x2 matrix each
@@ -19,29 +25,13 @@
  b: m*p
  o: n*m
 */
-__kernel void mmul(__global float* out, __global float const* a, __global float const* bt, int n, int m, int p)
+__kernel __attribute__((reqd_work_group_size(256, 1, 1)))
+void mmul(__global float* restrict out, __global float const* restrict a, __global float const* restrict bt,
+          int n, int m, int p)
 {
   int tn = n / TILE_SIDE;
   int tm = m / TILE_SIDE;
   int tp = p / TILE_SIDE;
-
-  /*
-    val ti = i / tile
-    val tj = j / tile
-    val tileOffset = (tc * ti + tj) * tileArea
-    val si = i % tile
-    val sj = j % tile
-    val part = sj & 0x01 | ((si & 0x01) << 1) // (0, 0), (0, 1), (1, 0), (1, 1)
-    val partIx = (si / 2) * (tile / 2) + (sj / 2)
-    tileOffset + part * partArea + partIx
-  */
-  // blocks are laid out row-major
-  // global_id(0) oti otj | TILE_SIDE==4
-  // 0            0   0
-  // 1            0   0
-  // 2            0   0
-//  int osgi = get_global_id(0) % (n / 2);
-//  int osgj = get_global_id(0) / (n / 2);
 
   int oti = get_group_id(0) / tm; // TSxTS block row
   int otj = get_group_id(0) % tm; // TSxTS block col
@@ -64,7 +54,7 @@ __kernel void mmul(__global float* out, __global float const* a, __global float 
 
     for (int i = 0; i < 4; i++) {
       atile[get_local_id(0) + i*SUB_STRIDE] = atile_g[get_local_id(0) + i*SUB_STRIDE];
-      barrier(CLK_LOCAL_MEM_FENCE); // this actually speeds things up
+      barrier(CLK_LOCAL_MEM_FENCE);
     }
     for (int i = 0; i < 4; i++) {
       btile[get_local_id(0) + i*SUB_STRIDE] = btile_g[get_local_id(0) + i*SUB_STRIDE];
@@ -86,10 +76,10 @@ __kernel void mmul(__global float* out, __global float const* a, __global float 
       float b01 = bsubm[SUB_STRIDE*1]; // -""-
       float b11 = bsubm[SUB_STRIDE*3];
 
-      temp00 = mad(a00, b00, temp00); temp00 = mad(a01, b10, temp00);
-      temp01 = mad(a00, b01, temp01); temp01 = mad(a01, b11, temp01);
-      temp10 = mad(a10, b00, temp10); temp10 = mad(a11, b10, temp10);
-      temp11 = mad(a10, b01, temp11); temp11 = mad(a11, b11, temp11);
+      temp00 = acc(a00, b00, temp00); temp00 = acc(a01, b10, temp00);
+      temp01 = acc(a00, b01, temp01); temp01 = acc(a01, b11, temp01);
+      temp10 = acc(a10, b00, temp10); temp10 = acc(a11, b10, temp10);
+      temp11 = acc(a10, b01, temp11); temp11 = acc(a11, b11, temp11);
     }
     barrier(CLK_LOCAL_MEM_FENCE);
   }

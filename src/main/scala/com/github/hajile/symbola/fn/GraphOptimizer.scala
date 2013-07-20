@@ -32,6 +32,8 @@ object GraphOptimizer {
         }
       case M.Sum(es) if es.size == 1 =>
         forwardPass(es(0))
+      case M.Sum(es) =>
+        forwardPass(M.Sum(es.map(forwardPass).filter(_ != M.Zero)))
       case M.Dotwise1(e, s, si) =>
         optimizeScalar(s) match {
           case S.One => M.One
@@ -80,18 +82,34 @@ object GraphOptimizer {
             S.Zero
           case (_, S.Zero) =>
             S.Zero
-          case _ => s
+          case (e1, S.Neg(e2)) =>
+            S.Neg(forwardPass(S.Mul(e1, e2)))
+          case (S.Neg(e1), e2) =>
+            S.Neg(forwardPass(S.Mul(e1, e2)))
+          case (e1, e2) =>
+            S.Mul(e1, e2)
+        }
+      case s@S.Div(e1, e2) =>
+        (forwardPass(e1), forwardPass(e2)) match {
+          case (S.Zero, e2) =>
+            S.Zero
+          case (e1, S.One) =>
+            e1
+          case (e1, e2) if e1 == e2 =>
+            S.One
+          case (e1, S.Neg(e2)) =>
+            S.Neg(forwardPass(S.Div(e1, e2)))
+          case (S.Neg(e1), e2) =>
+            S.Neg(forwardPass(S.Div(e1, e2)))
+          case (e1, e2) =>
+            S.Div(e1, e2)
         }
       case S.Sum(es@_*) if es.size == 1 =>
         forwardPass(es(0))
       case S.Sum(es@_*) =>
         forwardPass(S.Sum(es.map(forwardPass).filter(_ != S.Zero): _*))
-      case S.Div(e1, S.One) =>
-        forwardPass(e1)
-      case S.Div(S.Zero, e2) =>
-        S.Zero
-      case S.Div(e1, e2) if e1 == e2 => // Not actually correct
-        S.One
+      case S.Neg(S.Neg(e)) =>
+        forwardPass(e)
       case e =>
         ScalarExprHasInputs.map(e, forwardPass)
     })

@@ -8,21 +8,20 @@ import com.jogamp.opencl.CLBuffer
 import com.jogamp.opencl.CLMemory.Mem
 import java.nio.FloatBuffer
 import scala.util.Random
+import scalaxy.loops._
 
 class OpenCLExample
 
 object OpenCLExample extends OpenCLApp {
-  //  val kernelName = if (args.length >= 2) args(1) else "mmultopt"
-
   println(s"Available local memory: ${device.getLocalMemSize}")
 
   val debug = false
-  val check = true
+  val check = false
   val tile = if (debug) 32 else 32
   val tileSize = tile * tile
-  val sideN = if (debug) tile*2 else roundUpTo(256, tile)
-  val sideM = if (debug) tile*3 else roundUpTo(160, tile)
-  val sideP = if (debug) tile*4 else roundUpTo(384, tile)
+  val sideN = if (debug) tile*2 else roundUpTo(1024, tile)
+  val sideM = if (debug) tile*3 else roundUpTo(1024, tile)
+  val sideP = if (debug) tile*4 else roundUpTo(1024, tile)
 
   val buf1 = ctx.createFloatBuffer(sideN / tile * sideP / tile * tileSize, Mem.ALLOCATE_BUFFER, Mem.READ_ONLY)
   val buf2 = ctx.createFloatBuffer(sideP / tile * sideM / tile * tileSize, Mem.ALLOCATE_BUFFER, Mem.READ_ONLY)
@@ -55,28 +54,7 @@ object OpenCLExample extends OpenCLApp {
   for (i <- 0 until (if (debug) 1 else 10)) {
     val mx1 = new MatrixFloatBuffer(buf1.getBuffer, RealizedMatrix(sideN, sideP))
     val mx2 = new MatrixFloatBuffer(buf2.getBuffer, RealizedMatrix(sideM, sideP))
-//    val mx3 = new MatrixFloatBuffer(buf3.getBuffer, RealizedMatrix(sideN, sideM))
-    for (i <- 0 until sideN; j <- 0 until sideP)
-      mx1.put(i, j, ma(i, j))
-    for (i <- 0 until sideP; j <- 0 until sideM)
-      mx2.put(j, i, mb(i, j))
 
-    //    for (bi <- 0 until sideN/tile; bj <- 0 until sideP/tile) {
-    //      val b = roundUpTo(tile * tile * (bi * sideP / tile + bj), tileSize)
-    //      for (i <- 0 until tile; j <- 0 until tile) {
-    //        ptr1.put(b + i + j * tile, ma(bi * tile + i, bj * tile + j))
-    //      }
-    //    }
-    //    for (bi <- 0 until sideP/tile; bj <- 0 until sideM/tile) {
-    ////      val b = roundUpTo(tile * tile * (bi * sideM / tile + bj), tileSize)
-    ////      for (i <- 0 until tile; j <- 0 until tile) {
-    ////        ptr2.put(b + i + j * tile, mb(bi * tile + i, bj * tile + j))
-    ////      }
-    //      val b = roundUpTo((tile * tile) * (bi + bj * sideP / tile), tileSize)
-    //      for (i <- 0 until tile; j <- 0 until tile) {
-    //        ptr2.put(b + i * tile + j, mb(bi * tile + i, bj * tile + j))
-    //      }
-    //    }
     if (debug) {
       println(s"----- A -----\n\n$ma\n\n")
       println(s"-- A bytes --\n\n${dumpBuffer(buf1)}\n\n")
@@ -84,11 +62,14 @@ object OpenCLExample extends OpenCLApp {
       println(s"-- B bytes --\n\n${dumpBuffer(buf2)}\n\n")
     }
 
+    val began = System.nanoTime()
+    for (i <- 0 until sideN optimized; j <- 0 until sideP optimized)
+      mx1.put(i, j, ma(i, j))
+    for (j <- 0 until sideM optimized; i <- 0 until sideP optimized)
+      mx2.put(j, i, mb(i, j))
     q.putWriteBuffer(buf1, true)
     q.putWriteBuffer(buf2, true)
-
     q.finish()
-    val began = System.nanoTime()
     q.put1DRangeKernel(kernel, 0, sideN * sideM / 4, tile * tile / 4)
     q.putReadBuffer(buf3, true)
     q.finish()
@@ -106,17 +87,6 @@ object OpenCLExample extends OpenCLApp {
       val mxcl = new MatrixFloatBuffer(ret, RealizedMatrix(sideN, sideM))
       val mccl = mxcl.toDenseMatrix
 
-      //      val mccl = new DenseMatrix[Float](sideN, sideM)
-      //      for (i <- 0 until sideN; j <- 0 until sideM)
-      //        mccl.update(i, j, ret.get(i + j * sideN))
-
-      //      for (bi <- 0 until sideN/tile; bj <- 0 until sideM/tile) {
-      //        val b = roundUpTo((tile * tile) * (bi * sideM / tile + bj), tileSize)
-      //        for (i <- 0 until tile; j <- 0 until tile) {
-      //          mccl.update(bi * tile + i, bj * tile + j, ret.get(b + i + j * tile))
-      //        }
-      //      }
-
       if (debug) {
         println(s"----- C (CL) -----\n\n${mccl.toString(32, 400)}\n\n")
         println(s"----- C bytes ----\n\n${dumpBuffer(buf3)}\n\n")
@@ -126,13 +96,6 @@ object OpenCLExample extends OpenCLApp {
 
       Thread.sleep(100)
       mxcl.checkApproxEquals(mcref)
-
-      //    for (j <- 0 until ret.limit()) {
-      //      val x = j % side
-      //      val y = j / side
-      //      val r = ret.get(x + y * side)
-      //      println(s"[$x][$y] : $r")
-      //    }
     }
   }
 
@@ -144,7 +107,6 @@ object OpenCLExample extends OpenCLApp {
     if (n >= 0) n / d
     else ~(~n / d)
   }
-
 
   def dumpBuffer(ptr: CLBuffer[FloatBuffer]): String = {
     val buf = ptr.getBuffer

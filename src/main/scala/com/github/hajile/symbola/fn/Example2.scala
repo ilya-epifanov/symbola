@@ -5,27 +5,9 @@ import com.jogamp.opencl.{CLPlatform, CLContext}
 import scala.util.Random
 import com.jogamp.opencl.CLDevice.Type
 import com.jogamp.opencl.util.Filter
+import com.github.hajile.symbola.cl.OpenCLApp
 
-object Example2 extends App {
-  val platformString = if (args.length >= 1) args(0).toLowerCase else ""
-
-  for (p <- CLPlatform.listCLPlatforms()) {
-    println("Platform: " + p.getName)
-    for (d <- p.listCLDevices(Type.ALL)) {
-      println(s"  Device: ${d.getName} [${d.isAvailable}]")
-    }
-  }
-
-  val device = CLPlatform.getDefault(new Filter[CLPlatform] {
-    def accept(item: CLPlatform) = {
-      val name = item.getName
-      name.toLowerCase.contains(platformString)
-    }
-  }).getMaxFlopsDevice
-
-  println(s"Using device: $device")
-  val ctx = CLContext.create(device)
-
+object Example2 extends OpenCLApp {
   val expr = new ExprGraph(ctx)
 
   val x1 = expr.in("x1")

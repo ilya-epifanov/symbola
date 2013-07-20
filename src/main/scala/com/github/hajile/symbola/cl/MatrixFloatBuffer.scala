@@ -18,7 +18,7 @@ final class MatrixFloatBuffer(buf: FloatBuffer, shape: RealizedMatrix) {
 
   def toDenseMatrix: DenseMatrix[Float] = {
     val ret = new DenseMatrix[Float](shape.rows, shape.cols)
-    for (i <- 0 until shape.rows; j <- 0 until shape.cols) {
+    for (i <- 0 until shape.rows optimized; j <- 0 until shape.cols optimized) {
       ret.update(i, j, buf.get(offset(i, j)))
     }
     ret
@@ -36,7 +36,7 @@ final class MatrixFloatBuffer(buf: FloatBuffer, shape: RealizedMatrix) {
   }
 
   def checkApproxEquals(mx: DenseMatrix[Float]): Unit = {
-    for (i <- 0 until shape.rows; j <- 0 until shape.cols) {
+    for (i <- 0 until shape.rows optimized; j <- 0 until shape.cols optimized) {
       val ref = mx(i, j)
       val act = buf.get(offset(i, j))
 
